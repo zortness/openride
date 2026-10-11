@@ -26,6 +26,7 @@ func _ready() -> void:
 		request_finish()
 		hide())
 	bridge = ClassDB.instantiate("TrainerSession")
+	bridge.configure_pairing_path(ProjectSettings.globalize_path("user://pairing.json"))
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for side in ["left", "right", "top", "bottom"]:
@@ -35,7 +36,7 @@ func _ready() -> void:
 	column.add_theme_constant_override("separation", 16)
 	margin.add_child(column)
 	var intro := Label.new()
-	intro.text = "SUITO / Supervised session\nStart or Resume: 0%, 1%, 2%, 1%, 0%, then hold flat. Finish within 40 minutes."
+	intro.text = "Selected trainer / Supervised session\nStart or Resume: 0%, 1%, 2%, 1%, 0%, then hold flat. Finish within 40 minutes."
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(intro)
 	var buttons := HBoxContainer.new()
@@ -77,6 +78,8 @@ func _ready() -> void:
 
 func begin() -> void:
 	if bridge.is_active(): return
+	var saved: Dictionary = JSON.parse_string(bridge.pairing_selection())
+	if saved.has("error"): status.text = str(saved.error); return
 	var executable: String
 	if OS.has_feature("editor"):
 		executable = ProjectSettings.globalize_path("res://bin/device-probe.exe")
@@ -92,7 +95,7 @@ func begin() -> void:
 	last_sample = 0
 	metrics.text = "Waiting for trainer measurements"
 	grade.text = "No grade acknowledged"
-	status.text = "Connecting to SUITO..."
+	status.text = "Connecting to %s..." % saved.selection.resistance.name
 	recording.text = "Recording pending: " + directory
 	if bridge.start_session(executable, directory):
 		start.disabled = true
@@ -151,7 +154,8 @@ func ingest(row: Dictionary) -> void:
 			status.text = "Resume rejected: " + str(row.get("reason", ""))
 		"session_check_created":
 			recording.text = recording.text.replace("Recording pending:", "Recording:")
-		"indoor_bike_data":
+		"indoor_bike_data", "selected_measurements":
+			if row.get("selected_raw", false): return
 			var data = row.get("decoded", {}).get("Ok")
 			if data is Dictionary:
 				last_sample = Time.get_ticks_msec()

@@ -1,6 +1,5 @@
 use serde_json::json;
 use windows::{
-    core::Result,
     Devices::{
         Bluetooth::GenericAttributeProfile::{
             GattCharacteristic, GattClientCharacteristicConfigurationDescriptorValue,
@@ -11,7 +10,8 @@ use windows::{
     },
     Foundation::TypedEventHandler,
     Storage::Streams::{DataReader, IBuffer},
-    Win32::System::WinRT::{RoInitialize, RoUninitialize, RO_INIT_MULTITHREADED},
+    Win32::System::WinRT::{RO_INIT_MULTITHREADED, RoInitialize, RoUninitialize},
+    core::Result,
 };
 
 fn bytes(buffer: &IBuffer) -> Result<Vec<u8>> {
@@ -37,6 +37,40 @@ pub fn run() -> Result<()> {
     }
     let _apartment = Apartment;
     let args: Vec<String> = std::env::args().collect();
+    let discovery = args
+        .get(1)
+        .is_some_and(|a| a == "--discover" || a == "--inspect-id");
+    if discovery {
+        println!(
+            "{}",
+            json!({"event":"diagnostic_manifest", "schema":1,
+            "app_version":env!("CARGO_PKG_VERSION"), "platform":std::env::consts::OS,
+            "architecture":std::env::consts::ARCH, "mode":args[1],
+            "control_requested":false, "telemetry_verified":false,
+            "privacy":"Contains device names, Windows device IDs and capability/device-information fields. No routes, activity history, network keys or credentials."})
+        );
+    }
+    if args.get(1).is_some_and(|a| a == "--inspect-id") {
+        return inspect(
+            BluetoothLEDevice::FromIdAsync(&windows::core::HSTRING::from(&args[2]))?.join()?,
+        );
+    }
+    if args.get(1).is_some_and(|a| a == "--device-id") {
+        let selected = crate::selected_pairing(&args)
+            .map_err(|message| {
+                windows::core::Error::new(windows::core::HRESULT(0x80070057u32 as i32), message)
+            })?
+            .ok_or_else(|| {
+                windows::core::Error::new(
+                    windows::core::HRESULT(0x80070057u32 as i32),
+                    "Explicit device selection requires pairing",
+                )
+            })?;
+        return inspect(
+            BluetoothLEDevice::FromIdAsync(&windows::core::HSTRING::from(&selected.resistance.id))?
+                .join()?,
+        );
+    }
     if args.get(1).is_some_and(|a| a == "--address") {
         let address = args
             .get(2)
@@ -51,7 +85,7 @@ pub fn run() -> Result<()> {
         println!("{}", json!({"event":"stage", "name":"open_known_address"}));
         return inspect(BluetoothLEDevice::FromBluetoothAddressAsync(address)?.join()?);
     }
-    let target = args.get(1);
+    let target = if discovery { None } else { args.get(1) };
     println!(
         "{}",
         json!({"event":"stage", "name":"paired_device_selector"})
@@ -65,7 +99,10 @@ pub fn run() -> Result<()> {
     let mut matches = Vec::new();
     for info in devices {
         let name = info.Name()?.to_string();
-        println!("{}", json!({"event":"paired_device", "name":name}));
+        println!(
+            "{}",
+            json!({"event":"paired_device", "name":name, "id":info.Id()?.to_string(), "transport":"bluetooth_le"})
+        );
         if target.is_some_and(|t| t.eq_ignore_ascii_case(&name)) {
             matches.push(info);
         }
@@ -107,7 +144,7 @@ fn inspect(device: BluetoothLEDevice) -> Result<()> {
 fn inspect_connected(device: &BluetoothLEDevice, acquire: bool) -> Result<()> {
     println!(
         "{}",
-        json!({"event":"device", "name":device.Name()?.to_string(), "connection":format!("{:?}",device.ConnectionStatus()?)})
+        json!({"event":"device", "name":device.Name()?.to_string(), "id":device.DeviceId()?.to_string(), "connection":format!("{:?}",device.ConnectionStatus()?)})
     );
     let result = device
         .GetGattServicesWithCacheModeAsync(BluetoothCacheMode::Uncached)?
@@ -123,6 +160,10 @@ fn inspect_connected(device: &BluetoothLEDevice, acquire: bool) -> Result<()> {
     let mut control = None;
     let mut machine_status = None;
     let mut features = None;
+    let mut csc_features = None;
+    let mut power_features = None;
+    let mut standard_characteristics = Vec::new();
+    let mut complete = true;
     for service in &services {
         let service_uuid = service.Uuid()?;
         println!(
@@ -133,6 +174,7 @@ fn inspect_connected(device: &BluetoothLEDevice, acquire: bool) -> Result<()> {
             .GetCharacteristicsWithCacheModeAsync(BluetoothCacheMode::Uncached)?
             .join()?;
         if chars.Status()? != GattCommunicationStatus::Success {
+            complete = false;
             println!(
                 "{}",
                 json!({"event":"characteristic_error", "status":format!("{:?}",chars.Status()?)})
@@ -150,10 +192,13 @@ fn inspect_connected(device: &BluetoothLEDevice, acquire: bool) -> Result<()> {
             let is_standard = uuid.data2 == 0
                 && uuid.data3 == 0x1000
                 && uuid.data4 == [0x80, 0, 0, 0x80, 0x5f, 0x9b, 0x34, 0xfb];
+            if is_standard {
+                standard_characteristics.push((short, ch.CharacteristicProperties()?.0 as u32));
+            }
             if is_standard
                 && matches!(
                     short,
-                    0x2acc | 0x2ad4..=0x2ad8 | 0x2a26 | 0x2a27 | 0x2a28 | 0x2a29 | 0x2a24
+                    0x2acc | 0x2ad4..=0x2ad8 | 0x2a26 | 0x2a27 | 0x2a28 | 0x2a29 | 0x2a24 | 0x2a5c | 0x2a65
                 )
             {
                 let read = ch
@@ -161,6 +206,10 @@ fn inspect_connected(device: &BluetoothLEDevice, acquire: bool) -> Result<()> {
                     .join()?;
                 if read.Status()? == GattCommunicationStatus::Success {
                     let data = bytes(&read.Value()?)?;
+                    if short == 0x2a5c && data.len() == 2 {
+                        csc_features = Some(u16::from_le_bytes([data[0], data[1]]));
+                    }
+                    if short == 0x2a65 && data.len()==4 { power_features=Some(u32::from_le_bytes(data[..].try_into().unwrap())); }
                     if short == 0x2acc {
                         features = trainer_core::ftms::features(&data).ok();
                         println!(
@@ -189,6 +238,60 @@ fn inspect_connected(device: &BluetoothLEDevice, acquire: bool) -> Result<()> {
             if is_standard && short == 0x2ada {
                 machine_status = Some(ch);
             }
+        }
+    }
+    if std::env::args().any(|a| a == "--inspect-id") {
+        let has=|number| standard_characteristics.iter().any(|(id,properties)| *id==number && properties&0x10!=0);
+        let sensor_roles=json!({
+            "power":if has(0x2a63) { Some("cycling_power") } else { None },
+            "cadence":if has(0x2a5b) && csc_features.is_some_and(|f| f&2!=0) { Some("csc") }
+                else if has(0x2a63) && power_features.is_some_and(|f| f&8!=0) { Some("cycling_power") } else { None },
+            "heart_rate":if has(0x2a37) { Some("heart_rate") } else { None }
+        });
+        let ftms_characteristics: Vec<_> = standard_characteristics
+            .iter()
+            .copied()
+            .filter(|(id, _)| matches!(id, 0x2ad2 | 0x2ad9 | 0x2ada))
+            .collect();
+        println!(
+            "{}",
+            json!({"event":"capabilities", "id":device.DeviceId()?.to_string(),
+            "roles":trainer_core::discovery::capabilities(&standard_characteristics, features.as_ref(), csc_features),
+            "live_roles":trainer_core::discovery::capabilities(&ftms_characteristics, features.as_ref(), None),
+            "sensor_roles":sensor_roles,
+            "characteristic_discovery_complete":complete, "telemetry_verified":false, "control_verified":false,
+            "note":"Roles describe discovered standard capabilities, not verified operation. False means capability not established; unknown/vendor protocols may require an adapter."})
+        );
+        for service in services {
+            service.Close()?;
+        }
+        return Ok(());
+    }
+    let selected =
+        crate::selected_pairing(&std::env::args().collect::<Vec<_>>()).map_err(|message| {
+            windows::core::Error::new(windows::core::HRESULT(0x80070057u32 as i32), message)
+        })?;
+    if let Some(selected) = &selected {
+        let ftms_characteristics: Vec<_> = standard_characteristics
+            .iter()
+            .copied()
+            .filter(|(id, _)| matches!(id, 0x2ad2 | 0x2ad9 | 0x2ada))
+            .collect();
+        let caps =
+            trainer_core::discovery::capabilities(&ftms_characteristics, features.as_ref(), None);
+        let validation = if device.DeviceId()?.to_string() != selected.resistance.id {
+            Err("Connected device differs from selected identity".to_owned())
+        } else {
+            selected.check_capabilities(&caps)
+        };
+        if let Err(message) = validation {
+            for service in services {
+                service.Close()?;
+            }
+            return Err(windows::core::Error::new(
+                windows::core::HRESULT(0x80070057u32 as i32),
+                message,
+            ));
         }
     }
     if let Some(ch) = bike.clone() {
@@ -222,7 +325,10 @@ fn inspect_connected(device: &BluetoothLEDevice, acquire: bool) -> Result<()> {
                         count += 1;
                         println!(
                             "{}",
-                            json!({"event":"indoor_bike_data", "bytes":data, "decoded":trainer_core::ftms::indoor_bike(&data)})
+                            json!({"event":"indoor_bike_data", "bytes":data, "decoded":trainer_core::ftms::indoor_bike(&data).map(|mut decoded| {
+                                if let Some(pairing) = &selected { pairing.filter(&mut decoded); }
+                                decoded
+                            })})
                         );
                     }
                     Err(_) => break,

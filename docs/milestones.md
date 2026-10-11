@@ -121,7 +121,8 @@ Do not claim untested USB trainer models or infer ANT support from BLE success.
 
 ## M6 — Multi-device pairing and friend testing
 
-Agreed 2026-10-11; not yet implemented. See the [M6 brief](m6-device-compatibility.md)
+Agreed 2026-10-11; discovery/diagnostics implementation has started. See
+[M6 progress](m6-progress.md) and the [M6 brief](m6-device-compatibility.md)
 for outcomes, device evidence, acceptance gates and unresolved equipment details.
 
 Target setups: Echelon EX-5S, KICKR CORE with Zwift Cog/Click, and Saris M2.

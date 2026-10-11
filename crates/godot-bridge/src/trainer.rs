@@ -1,13 +1,14 @@
 //! Process boundary: BLE and disk synchronization never run on Godot's thread.
 use godot::{classes::RefCounted, prelude::*};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::VecDeque,
     io::{BufRead, BufReader, Write},
     process::{Command, Stdio},
     sync::{
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
-        mpsc, Arc, Mutex,
+        mpsc,
     },
 };
 
@@ -36,6 +37,7 @@ struct TrainerSession {
     active: Arc<AtomicBool>,
     commands: Option<mpsc::Sender<String>>,
     hr_config: String,
+    pairing_file: String,
 }
 impl Drop for TrainerSession {
     fn drop(&mut self) {
@@ -45,6 +47,31 @@ impl Drop for TrainerSession {
 #[godot_api]
 impl TrainerSession {
     #[func]
+    fn configure_pairing_path(&mut self, path: GString) {
+        if !self.active.load(Ordering::SeqCst) {
+            self.pairing_file = path.to_string();
+        }
+    }
+    #[func]
+    fn pairing_selection(&self) -> GString {
+        let value = match trainer_core::pairing::load(std::path::Path::new(&self.pairing_file)) {
+            Ok(pairing) => json!({"selection":pairing}),
+            Err(error) => json!({"error":error}),
+        };
+        value.to_string().as_str().into()
+    }
+    #[func]
+    fn save_pairing(&self, selection: GString) -> GString {
+        if SESSION_OWNER.load(Ordering::SeqCst) {
+            return "Finish the current ride or diagnostic before changing sources".into();
+        }
+        let result =
+            trainer_core::pairing::Pairing::parse(&selection.to_string()).and_then(|pairing| {
+                trainer_core::pairing::save(std::path::Path::new(&self.pairing_file), &pairing)
+            });
+        result.err().unwrap_or_default().as_str().into()
+    }
+    #[func]
     fn configure_heart_rate(&mut self, config: GString) {
         if !self.active.load(Ordering::SeqCst) {
             self.hr_config = config.to_string();
@@ -52,7 +79,18 @@ impl TrainerSession {
     }
     #[func]
     fn start_session(&mut self, executable: GString, directory: GString) -> bool {
-        self.start_worker(executable, directory, None)
+        self.start_worker(executable, directory, None, None)
+    }
+    /// Empty identity enumerates Windows-paired BLE devices. A selected identity
+    /// inspects capabilities only, with no subscriptions or trainer commands.
+    #[func]
+    fn start_discovery(
+        &mut self,
+        executable: GString,
+        directory: GString,
+        identity: GString,
+    ) -> bool {
+        self.start_worker(executable, directory, None, Some(identity.to_string()))
     }
     #[func]
     fn start_route_session(
@@ -71,6 +109,7 @@ impl TrainerSession {
                 expected_sha256.to_string(),
                 package_sha256.to_string(),
             )),
+            None,
         )
     }
     #[func]
@@ -115,6 +154,7 @@ impl TrainerSession {
         executable: GString,
         directory: GString,
         route: Option<(String, String, String)>,
+        discovery: Option<String>,
     ) -> bool {
         if self.active.load(Ordering::SeqCst)
             || SESSION_OWNER
@@ -125,6 +165,15 @@ impl TrainerSession {
         }
         self.active.store(true, Ordering::SeqCst);
         *self.feed.lock().unwrap() = Feed::default();
+        // Read once on the main thread. Every worker receives an immutable snapshot;
+        // malformed/missing preferences never fall back to a device name.
+        let pairing = if discovery.is_none() {
+            Some(trainer_core::pairing::load(std::path::Path::new(
+                &self.pairing_file,
+            )))
+        } else {
+            None
+        };
         let (tx, rx) = mpsc::channel();
         self.commands = Some(tx);
         let feed = self.feed.clone();
@@ -135,6 +184,10 @@ impl TrainerSession {
         std::thread::spawn(move || {
             let emit = |row| feed.lock().unwrap().push(row);
             let result = (|| -> Result<(), String> {
+                let pairing = pairing.transpose()?;
+                if pairing.as_ref().is_some_and(|p| p.heart_rate.is_some()) && !hr_config.is_empty() {
+                    return Err("Choose Bluetooth OR ANT heart rate in ride setup, not both".into());
+                }
                 let directory = std::path::PathBuf::from(directory);
                 std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
                 let errors = std::fs::OpenOptions::new()
@@ -148,13 +201,28 @@ impl TrainerSession {
                     .open(directory.join("ble.jsonl"))
                     .map_err(|e| e.to_string())?;
                 let mut command = Command::new(executable);
+                if let Some(identity) = &discovery {
+                    if identity.is_empty() {
+                        command.arg("--discover");
+                    } else {
+                        command.arg("--inspect-id").arg(identity);
+                    }
+                } else {
+                    let pairing = pairing.as_ref().ok_or("Trainer pairing missing")?;
+                    command
+                        .arg("--device-id")
+                        .arg(&pairing.resistance.id)
+                        .arg(format!(
+                            "--pairing={}",
+                            serde_json::to_string(pairing).map_err(|e| e.to_string())?
+                        ))
+                        .arg(format!(
+                            "--live-session={}",
+                            directory.join("session.jsonl").display()
+                        ))
+                        .arg("--ui-control");
+                }
                 command
-                    .arg("SUITO")
-                    .arg(format!(
-                        "--live-session={}",
-                        directory.join("session.jsonl").display()
-                    ))
-                    .arg("--ui-control")
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .stderr(errors);
@@ -163,7 +231,7 @@ impl TrainerSession {
                     command.arg(format!("--expected-route-sha256={expected}"));
                     command.arg(format!("--package-sha256={package}"));
                 }
-                if !hr_config.is_empty() {
+                if discovery.is_none() && !hr_config.is_empty() {
                     command.arg(format!("--ant-hr-config={hr_config}"));
                 }
                 #[cfg(windows)]

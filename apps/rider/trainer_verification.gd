@@ -9,8 +9,16 @@ func check(condition: bool, message: String) -> void:
 func run(tree: SceneTree) -> void:
 	var session = load("res://trainer_session.gd").new()
 	tree.root.add_child(session)
+	var device := {"id":"synthetic-two", "name":"Synthetic trainer"}
+	check(session.bridge.save_pairing(JSON.stringify({"schema":1,"resistance":device,"power":device,"cadence":device})).is_empty(), "Could not save fixture pairing")
 	session.ingest({"event":"indoor_bike_data","decoded":{"Ok":{"power_w":0,"cadence_rpm":null,"speed_kmh":0,"heart_rate_bpm":null}}})
 	check(session.metrics.text.contains("0 W") and session.metrics.text.contains("\u2014 rpm"), "Zero/missing telemetry lost")
+	session.ingest({"event":"selected_measurements","decoded":{"Ok":{"power_w":0,"cadence_rpm":91,"heart_rate_bpm":120}}})
+	check(session.metrics.text.contains("91 rpm") and session.metrics.text.contains("120 bpm"), "Selected sensor values not displayed")
+	session.ingest({"event":"indoor_bike_data","selected_raw":true,"decoded":{"Ok":{"power_w":900,"cadence_rpm":30}}})
+	check(session.metrics.text.contains("0 W") and session.metrics.text.contains("91 rpm"), "Raw trainer packet replaced selected sensors")
+	session.ingest({"event":"selected_measurements","decoded":{"Ok":{"power_w":null,"cadence_rpm":null,"heart_rate_bpm":null}}})
+	check(session.metrics.text.contains("\u2014 W") and session.metrics.text.contains("\u2014 bpm"), "Missing selected sensor retained stale values")
 	session.ingest({"event":"command_requested","opcode":17,"bytes":[17,0,0,200,0,40,51]})
 	check(session.grade.text.contains("awaiting"), "Request mistaken for acknowledgement")
 	session.ingest({"event":"command_acknowledged","opcode":17,"bytes":[17,0,0,200,0,40,51]})
@@ -27,6 +35,7 @@ func run(tree: SceneTree) -> void:
 		tree.quit(1)
 		return
 	check(session.bridge.start_session(fixture, capture), "Worker failed to launch")
+	check(not session.bridge.save_pairing(JSON.stringify({"schema":1,"resistance":device,"power":device,"cadence":null})).is_empty(), "Pairing changed during an active session")
 	check(not session.bridge.start_session(fixture, capture), "Second internal worker allowed")
 	var deadline := Time.get_ticks_msec() + 10000
 	while not session.status.text.contains("Running") and Time.get_ticks_msec() < deadline:
@@ -52,8 +61,15 @@ func run(tree: SceneTree) -> void:
 	check(session.completed, "Pause did not complete through stdin/stdout")
 	check(session.status.text.contains("Finished"), "Completion not shown")
 	check(FileAccess.file_exists(capture.path_join("ble.jsonl")), "Capture not saved")
+	var selected_sources := {}
+	for line in FileAccess.get_file_as_string(capture.path_join("ble.jsonl")).split("\n", false):
+		var row: Dictionary = JSON.parse_string(line)
+		if row.get("event") == "selected_sources": selected_sources = row.roles
+	check(selected_sources.get("resistance", {}).get("id") == "synthetic-two", "Selected trainer snapshot lost across worker boundary")
+	check(selected_sources.get("cadence") != null, "Active source snapshot changed")
 	check(FileAccess.get_file_as_string(capture.path_join("fixture-control.txt")) == "pause\nresume 1\nfinish\n", "Pause/Resume/Finish command sequence incorrect")
 	var abandoned: RefCounted = ClassDB.instantiate("TrainerSession")
+	abandoned.configure_pairing_path(ProjectSettings.globalize_path("user://pairing.json"))
 	check(abandoned.start_session(fixture, capture + "-close"), "Close fixture launch failed")
 	var running := false
 	deadline = Time.get_ticks_msec() + 10000

@@ -63,6 +63,10 @@ func run(app: Node) -> void:
 		if not check(shell.stack[-1]==app.activity_export and not app.activity_export.source.is_empty(),"History export navigation",app): return
 		shell.back()
 	if not worker.is_empty() and not package.is_empty():
+		var pairing_bridge: RefCounted = ClassDB.instantiate("TrainerSession")
+		pairing_bridge.configure_pairing_path(ProjectSettings.globalize_path("user://pairing.json"))
+		var fixture_device := {"id":"synthetic-two", "name":"Synthetic trainer"}
+		if not check(pairing_bridge.save_pairing(JSON.stringify({"schema":1,"resistance":fixture_device,"power":fixture_device,"cadence":fixture_device})).is_empty(), "Save fixture pairing", app): return
 		app._open_scenery(package,true)
 		var world = app.scenery_window; var runtime = world.content
 		await app.get_tree().process_frame
@@ -83,6 +87,9 @@ func run(app: Node) -> void:
 		shell.pause_button.pressed.emit()
 		while runtime.live_ride.phase!="paused" and Time.get_ticks_msec()<deadline: await app.get_tree().process_frame
 		if not check(runtime.live_ride.phase=="paused","Menu pauses ride",app): return
+		# Force the completion-drain race: the shell must collect final worker
+		# events even when the ride screen did not get another processing frame.
+		runtime.set_process(false)
 		shell.finish_button.pressed.emit()
 		while shell.stack[-1]!=shell.history and Time.get_ticks_msec()<deadline: await app.get_tree().process_frame
 		if not check(not runtime.live_ride.active() and runtime.live_ride.completed and shell.stack[-1]==shell.history,"End waits for shutdown then opens activities",app): return

@@ -3,7 +3,7 @@ extends RefCounted
 var bridge: RefCounted = ClassDB.instantiate("TrainerSession")
 var state := {}
 var phase := "disconnected"
-var note := "Connect SUITO, then Start ride"
+var note := "Connect the selected trainer, then Start ride"
 var epoch := 0
 var can_resume := false
 var started := false
@@ -21,6 +21,10 @@ var hr_config := ""
 var hr_bpm: Variant = null
 var hr_status := "off"
 var hr_deadline := 0
+var ble_hr_unavailable := false
+
+func _init() -> void:
+	bridge.configure_pairing_path(ProjectSettings.globalize_path("user://pairing.json"))
 
 func heart_rate_text() -> String:
 	if hr_status=="off":return ""
@@ -31,17 +35,27 @@ func heart_rate_text() -> String:
 func active() -> bool:
 	return bridge.is_active()
 
+func pairing_summary() -> String:
+	var saved: Dictionary = JSON.parse_string(bridge.pairing_selection())
+	if saved.has("error"): return "Select a trainer in Settings / Devices before connecting."
+	var roles: Dictionary = saved.selection
+	return "Resistance: %s | Power: %s\nCadence: %s | Bluetooth HR: %s" % [roles.resistance.name, roles.power.name, "Off" if roles.cadence == null else roles.cadence.name, "Off" if roles.get("heart_rate") == null else roles.heart_rate.name]
+
 func connect_trainer(route_path:String,expected_sha256:String,package_sha256:String) -> void:
 	if active():return
+	var saved: Dictionary = JSON.parse_string(bridge.pairing_selection())
+	if saved.has("error"): note = str(saved.error); return
+	if saved.selection.get("heart_rate") != null and not hr_config.is_empty(): note = "Choose Bluetooth OR ANT heart rate, not both."; return
 	var executable:String=ProjectSettings.globalize_path("res://bin/device-probe.exe") if OS.has_feature("editor") else OS.get_executable_path().get_base_dir().path_join("device-probe.exe")
 	if not worker_override.is_empty():executable=worker_override
 	directory=ProjectSettings.globalize_path("user://sessions").path_join("route-%s-%s" % [str(Time.get_unix_time_from_system()).replace(".","-"),str(Time.get_ticks_usec())])
 	bridge.configure_heart_rate(hr_config)
+	ble_hr_unavailable = false
 	cadence=null;ride_start_ms=-1;elapsed_ms=0
-	hr_bpm=null;hr_status="off" if hr_config.is_empty() else "searching"
+	hr_bpm=null;hr_status="off" if hr_config.is_empty() and saved.selection.get("heart_rate") == null else "searching"
 	if not bridge.start_route_session(executable,directory,route_path,expected_sha256,package_sha256):
 		note="Another trainer session is active";return
-	started=false;state={};phase="connecting";note="Connecting to SUITO...";epoch=0;can_resume=false;pending="";completed=false;faulted=false;route_complete=false
+	started=false;state={};phase="connecting";note="Connecting to %s..." % saved.selection.resistance.name;epoch=0;can_resume=false;pending="";completed=false;faulted=false;route_complete=false
 
 func toggle() -> void:
 	if not active() or not pending.is_empty() or faulted:return
@@ -59,7 +73,17 @@ func poll() -> void:
 	for row in JSON.parse_string(bridge.poll_session()):
 		elapsed_ms=int(row.get("elapsed_ms",elapsed_ms))
 		match row.get("event",""):
+			"ble_sensor_data":
+				if row.get("protocol") == "heart_rate": ble_hr_unavailable = row.get("error") != null
+			"selected_measurements":
+				var values: Dictionary = row.get("decoded", {}).get("Ok", {})
+				cadence = values.get("cadence_rpm")
+				cadence_deadline = Time.get_ticks_msec() + maxi(0,3000-int(row.get("elapsed_ms",0))+int(values.get("cadence_received_ms",0) if values.get("cadence_received_ms") != null else 0))
+				if hr_config.is_empty() and hr_status != "off":
+					hr_bpm = values.get("heart_rate_bpm"); hr_status = "receiving" if hr_bpm != null else ("unavailable" if ble_hr_unavailable else "searching")
+					hr_deadline = Time.get_ticks_msec() + maxi(0,3000-int(row.get("elapsed_ms",0))+int(values.get("hr_received_ms",0) if values.get("hr_received_ms") != null else 0))
 			"indoor_bike_data":
+				if row.get("selected_raw",false): continue
 				cadence=row.get("decoded",{}).get("Ok",{}).get("cadence_rpm")
 				cadence_deadline=Time.get_ticks_msec()+maxi(0,3000-int(row.get("elapsed_ms",0))+int(row.get("received_ms",0)))
 			"ant_hr_data":

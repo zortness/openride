@@ -26,10 +26,6 @@ window/size/window_width_override=1280
 window/size/window_height_override=860
 window/stretch/mode="canvas_items"
 
-[gui]
-
-theme/custom="res://ui/controls.tres"
-
 [rendering]
 
 renderer/rendering_method="gl_compatibility"

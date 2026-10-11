@@ -10,7 +10,7 @@ Use `./tools/probe-devices.ps1 -SessionCheck` for the supervised short Start/Pau
 
 Use `./tools/probe-devices.ps1 -ResistanceCheck` for the stationary simulation-command check (do not pedal), or `./tools/probe-devices.ps1 -PedalCheck` for the supervised moving test. PedalCheck announces 0%, 1%, 2%, 1%, 0% grades live with ten-second holds, then restores flat grade and requests Pause. Pedal easily in one gear at roughly steady cadence to compare the steps. Close other trainer applications first. All four control modes are mutually exclusive and save captures under `local/device-probe-*`; share the folder name and your resistance observations afterward. The agent cannot access BLE in its restricted session, so hardware checks must run from your normal PowerShell session.
 
-The app's **Trainer session** window now supports a persistent session. **Start session** connects to the paired SUITO and starts the gentle 0%, 1%, 2%, 1%, 0% profile with ten-second steps, then holds flat until paused or finished. **Pause** restores flat grade and acknowledges Pause while keeping telemetry, the connection, and recording open. **Resume** requires the current paused state and fresh power telemetry; it restarts the profile from flat. **Finish** or closing the session window requests flat/Pause, observes five seconds, and disconnects. A deliberate new Start is required after disconnect/failure. Imported route elevations are not sent to the trainer.
+The app's **Trainer session** window now supports a persistent session. **Start session** connects to the selected FTMS trainer and starts the gentle 0%, 1%, 2%, 1%, 0% profile with ten-second steps, then holds flat until paused or finished. **Pause** restores flat grade and acknowledges Pause while keeping telemetry, the connection, and recording open. **Resume** requires the current paused state and fresh power telemetry; it restarts the profile from flat. **Finish** or closing the session window requests flat/Pause, observes five seconds, and disconnects. A deliberate new Start is required after disconnect/failure. Imported route elevations are not sent to the trainer.
 
 Persistent sessions finish automatically at 40 minutes, including paused time. An outer 45-minute limit and a 90-second worker-progress watchdog cover hangs; individual command deadlines and the three-second power freshness guard still apply. These limits support the planned 30-minute supervised test but do not establish that acceptance result. The existing CLI `-PedalCheck` remains the short bounded diagnostic.
 
@@ -48,6 +48,14 @@ cargo run -p ride-core --bin inspect --offline -- validate-route local/rpv-secti
 Create the output directory first and use a new filename for each export. Export indexes are zero based and inclusive. Use a `.gpx` suffix for a GPX track; otherwise the exporter writes the draft JSON route manifest. Import JSON includes personal measurements, so keep reports in the ignored local directory.
 
 ## Godot application
+
+Before a live ride or supervised trainer session, open Settings → **Discover
+devices / save diagnostics**, inspect your Windows-paired trainer and save its
+resistance/power roles. Inspect independent Bluetooth sensors to assign power,
+cadence or heart rate. Cadence is optional. Choose Bluetooth HR or ANT HR in ride
+setup; enabling both blocks connection. The app connects by saved device ID and
+no longer defaults to SUITO by name. See [M6 progress](m6-progress.md) for setup,
+freshness behavior and current transport limits.
 
 The application uses Godot 4.6.2 with a Rust GDExtension targeting Godot API 4.5. Fetch locked dependencies once, then builds can run offline.
 

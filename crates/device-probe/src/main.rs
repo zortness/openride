@@ -9,14 +9,25 @@ mod ant_usb;
 #[cfg(windows)]
 mod ble;
 #[cfg(windows)]
+mod ble_sensor;
+#[cfg(windows)]
 mod continuous;
 #[cfg(windows)]
 mod control;
+mod discovery_args;
 mod journal;
 mod ui_control;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if let Err(message) = discovery_args::validate(&args) {
+        eprintln!("{message}");
+        std::process::exit(1);
+    }
+    if let Err(message) = selected_pairing(&args) {
+        eprintln!("{message}");
+        std::process::exit(1);
+    }
     #[cfg(windows)]
     if args.iter().any(|a| a.starts_with("--ant-journal=")) {
         let (tx, rx) = std::sync::mpsc::channel();
@@ -138,7 +149,9 @@ fn main() {
                     serde_json::json!({"event":"probe_error", "message":e.to_string(), "hresult":e.code().0})
                 );
                 if e.code().0 == 0 {
-                    eprintln!("Probe failed: Windows returned a null device/result without an error code. Check trainer power, pairing, and access from this Windows session.");
+                    eprintln!(
+                        "Probe failed: Windows returned a null device/result without an error code. Check trainer power, pairing, and access from this Windows session."
+                    );
                 } else {
                     eprintln!("Probe failed: {e}");
                 }
@@ -149,7 +162,9 @@ fn main() {
                     "{}",
                     serde_json::json!({"event":"probe_error", "message":format!("Controller watchdog: {timeout_s}s total limit or worker stalled; terminating, trainer state unconfirmed")})
                 );
-                eprintln!("Controller exceeded its time/progress watchdog; trainer state unconfirmed. Check capture for command outcomes.");
+                eprintln!(
+                    "Controller exceeded its time/progress watchdog; trainer state unconfirmed. Check capture for command outcomes."
+                );
                 std::process::exit(1);
             }
         }
@@ -159,6 +174,28 @@ fn main() {
         eprintln!("The current probe requires Windows");
         std::process::exit(1);
     }
+}
+
+fn selected_pairing(args: &[String]) -> Result<Option<trainer_core::pairing::Pairing>, String> {
+    let selections: Vec<_> = args
+        .iter()
+        .filter_map(|a| a.strip_prefix("--pairing="))
+        .collect();
+    let ids = args.iter().filter(|a| a.as_str() == "--device-id").count();
+    if selections.is_empty() && ids == 0 {
+        return Ok(None);
+    }
+    if selections.len() != 1 || ids != 1 || args.get(1).map(String::as_str) != Some("--device-id") {
+        return Err(
+            "Use one --device-id followed by its Windows identity and one --pairing snapshot"
+                .into(),
+        );
+    }
+    let pairing = trainer_core::pairing::Pairing::parse(selections[0])?;
+    if args.get(2) != Some(&pairing.resistance.id) {
+        return Err("Device identity does not match selected resistance source".into());
+    }
+    Ok(Some(pairing))
 }
 
 fn replay(path: Option<&str>) -> Result<(), String> {
@@ -197,4 +234,50 @@ fn replay(path: Option<&str>) -> Result<(), String> {
         serde_json::json!({"event":"replay_complete", "packets":packets})
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod pairing_tests {
+    use super::selected_pairing;
+    #[test]
+    fn explicit_identity_requires_matching_single_snapshot() {
+        let d = serde_json::json!({"id":"second-device", "name":"Duplicate name"});
+        let raw = format!(
+            "--pairing={}",
+            serde_json::json!({"schema":1,"resistance":d,"power":d,"cadence":null})
+        );
+        let mut args = vec![
+            "worker".into(),
+            "--device-id".into(),
+            "second-device".into(),
+            raw.clone(),
+        ];
+        assert_eq!(
+            selected_pairing(&args).unwrap().unwrap().resistance.id,
+            "second-device"
+        );
+        args[2] = "first-device".into();
+        assert!(selected_pairing(&args).is_err());
+        args[2] = "second-device".into();
+        args.push(raw);
+        assert!(selected_pairing(&args).is_err());
+        args.truncate(3);
+        assert!(selected_pairing(&args).is_err());
+    }
+    #[test]
+    fn external_power_dropout_holds_route_and_does_not_resume_on_recovery() {
+        use trainer_core::ble_sensors::{Selected,Kind,Values};
+        let p=trainer_core::pairing::Pairing::parse(r#"{"schema":2,"resistance":{"id":"trainer","name":"T"},"power":{"id":"meter","name":"P","protocol":"cycling_power"},"cadence":null}"#).unwrap();
+        let mut sources=Selected::new(p);
+        let mut ride=ride_core::live::LiveRide::parse(br#"{"points":[{"distance_m":0,"elevation_m":0},{"distance_m":1000,"elevation_m":0}]}"#).unwrap();
+        sources.sensor("meter",Kind::CyclingPower,Values{power_w:Some(200),..Default::default()},0);
+        let sample=sources.sample(0); ride.telemetry(sample.power_received_ms.unwrap(),sample.values.power_w.map(f64::from));
+        assert!(ride.resume(0)); ride.tick(1000);
+        sources.trainer(&trainer_core::ftms::BikeData{power_w:Some(900),..Default::default()},3001);
+        let sample=sources.sample(3001); ride.telemetry(sample.power_received_ms.unwrap(),sample.values.power_w.map(f64::from)); ride.tick(3001);
+        assert_ne!(ride.status(),"running"); let stopped=ride.snapshot()["distance_m"].clone();
+        sources.sensor("meter",Kind::CyclingPower,Values{power_w:Some(200),..Default::default()},3100);
+        let sample=sources.sample(3100); ride.telemetry(sample.power_received_ms.unwrap(),sample.values.power_w.map(f64::from)); ride.tick(3200);
+        assert_ne!(ride.status(),"running"); assert_eq!(ride.snapshot()["distance_m"],stopped);
+    }
 }

@@ -3,17 +3,17 @@ use serde_json::json;
 use std::{
     path::Path,
     sync::{
+        Arc,
         atomic::{AtomicBool, Ordering},
-        mpsc, Arc,
+        mpsc,
     },
     time::{Duration, Instant},
 };
 use trainer_core::{
-    diagnostic::{resistance_request, CheckMode, SessionCheck, RESISTANCE_GRADES},
-    ftms::{indoor_bike, ControlPoint, Features, Outcome, Request},
+    diagnostic::{CheckMode, RESISTANCE_GRADES, SessionCheck, resistance_request},
+    ftms::{ControlPoint, Features, Outcome, Request, indoor_bike},
 };
 use windows::{
-    core::{Error, Result, HRESULT},
     Devices::Bluetooth::{
         BluetoothConnectionStatus, BluetoothLEDevice,
         GenericAttributeProfile::{
@@ -22,6 +22,7 @@ use windows::{
         },
     },
     Storage::Streams::DataWriter,
+    core::{Error, HRESULT, Result},
 };
 
 fn error(message: impl ToString) -> Error {
@@ -48,6 +49,11 @@ struct Runtime<'a> {
     grade: trainer_core::route_grade::RouteGrade,
     ride_record_ms: u64,
     run_ack: trainer_core::live::RunAcknowledgements,
+    pairing: Option<trainer_core::pairing::Pairing>,
+    sensors: Vec<crate::ble_sensor::Worker>,
+    selected: Option<trainer_core::ble_sensors::Selected>,
+    measurement_ms: Option<u64>,
+    trainer_data: Option<(u64, trainer_core::ftms::BikeData)>,
 }
 impl Runtime<'_> {
     fn drain_hr(&mut self) -> Result<()> {
@@ -103,21 +109,71 @@ impl Runtime<'_> {
                     }
                 }
                 2 => {
-                    let decoded = indoor_bike(&bytes).map_err(error)?;
+                    let mut decoded = indoor_bike(&bytes).map_err(error)?;
                     let received_ms =
                         received.saturating_duration_since(self.clock).as_millis() as u64;
-                    self.policy
-                        .telemetry(received_ms, decoded.power_w.is_some());
-                    if let Some(ride) = &mut self.ride {
-                        ride.telemetry(received_ms, decoded.power_w.map(f64::from));
-                        ride.tick(ms);
+                    self.trainer_data = Some((received_ms, decoded.clone()));
+                    if let Some(selected) = &mut self.selected {
+                        selected.trainer(&decoded, received_ms);
+                        if let Some(pairing) = &self.pairing {
+                            pairing.filter(&mut decoded);
+                        }
+                    } else {
+                        self.policy
+                            .telemetry(received_ms, decoded.power_w.is_some());
+                        if let Some(ride) = &mut self.ride {
+                            ride.telemetry(received_ms, decoded.power_w.map(f64::from));
+                            ride.tick(ms);
+                        }
                     }
                     if let Some(speed) = decoded.speed_kmh {
                         self.speed = Some((speed, received_ms));
                     }
-                    self.log(json!({"event":"indoor_bike_data","bytes":bytes,"decoded":{"Ok":decoded},"received_ms":received_ms}))?;
+                    self.log(json!({"event":"indoor_bike_data","selected_raw":self.selected.is_some(),"bytes":bytes,"decoded":{"Ok":decoded},"received_ms":received_ms}))?;
                 }
                 _ => return Err(error("Unexpected callback kind")),
+            }
+        }
+        let mut events = Vec::new();
+        for sensor in &self.sensors {
+            events.extend(sensor.rx.try_iter().take(128));
+        }
+        for event in events {
+            if let Some(selected) = &mut self.selected {
+                selected.sensor(&event.id, event.kind, event.values, event.received_ms);
+            }
+            self.log(json!({"event":"ble_sensor_data","id":event.id,"protocol":event.kind,"received_ms":event.received_ms,
+                "values":event.values,"bytes":event.bytes,"error":event.error}))?;
+        }
+        let now = self.ms();
+        if let Some(selected) = &self.selected {
+            let sample = selected.sample(now);
+            let usable_power = sample.values.power_w.filter(|p| (0..=3000).contains(p));
+            if let Some(received) = sample.power_received_ms {
+                self.policy.telemetry(received, usable_power.is_some());
+                if let Some(ride) = &mut self.ride {
+                    ride.telemetry(received, usable_power.map(f64::from));
+                }
+            }
+            if usable_power.is_none() {
+                self.policy.clear_power();
+            }
+            if self
+                .measurement_ms
+                .is_none_or(|t| now.saturating_sub(t) >= 200)
+            {
+                let mut decoded = serde_json::to_value(sample).map_err(error)?;
+                if let Some((_, trainer)) = self
+                    .trainer_data
+                    .as_ref()
+                    .filter(|(t, _)| now >= *t && now - *t < 3000)
+                {
+                    decoded["speed_kmh"] = json!(trainer.speed_kmh);
+                    decoded["distance_m"] = json!(trainer.distance_m);
+                    decoded["elapsed_s"] = json!(trainer.elapsed_s);
+                }
+                self.log(json!({"event":"selected_measurements","received_ms":now,"decoded":{"Ok":decoded}}))?;
+                self.measurement_ms = Some(now);
             }
         }
         if self.ride.is_some() && self.ms().saturating_sub(self.ride_record_ms) >= 200 {
@@ -284,7 +340,7 @@ impl Runtime<'_> {
             if INBOX.lock().unwrap().finish_reason().is_some() {
                 break;
             }
-            if self.ms() - wait > 5000 {
+            if self.ms() - wait > if self.sensors.is_empty() { 5000 } else { 20000 } {
                 return Err(error("No fresh power telemetry; Start not sent"));
             }
             std::thread::sleep(Duration::from_millis(10));
@@ -599,6 +655,12 @@ pub fn run(
         None
     };
     let clock = Instant::now();
+    let pairing = crate::selected_pairing(&std::env::args().collect::<Vec<_>>()).map_err(error)?;
+    if pairing.as_ref().is_some_and(|p| p.heart_rate.is_some())
+        && std::env::args().any(|a| a.starts_with("--ant-hr-config="))
+    {
+        return Err(error("Choose Bluetooth OR ANT heart rate, not both"));
+    }
     let journal = Journal::create(journal_path).map_err(error)?;
     let (tx, rx) = mpsc::sync_channel(128);
     let failed = Arc::new(AtomicBool::new(false));
@@ -618,8 +680,41 @@ pub fn run(
         grade: Default::default(),
         ride_record_ms: 0,
         run_ack: Default::default(),
+        selected: pairing
+            .clone()
+            .map(trainer_core::ble_sensors::Selected::new),
+        pairing,
+        sensors: vec![],
+        measurement_ms: None,
+        trainer_data: None,
     };
     let result = (|| {
+        if let Some(pairing) = &runtime.pairing {
+            runtime.log(json!({"event":"selected_sources", "schema":1, "measurement_schema":1, "transport":"bluetooth_le", "roles":pairing,
+                "connected_device_id":device.DeviceId()?.to_string(), "connected_device_name":device.Name()?.to_string()}))?;
+        }
+        if let Some(pairing) = &runtime.pairing {
+            let mut groups: Vec<(String, Vec<trainer_core::ble_sensors::Kind>)> = vec![];
+            for d in std::iter::once(&pairing.power)
+                .chain(pairing.cadence.as_ref())
+                .chain(pairing.heart_rate.as_ref())
+            {
+                if let Some(kind) = d.protocol {
+                    if let Some((_, kinds)) = groups.iter_mut().find(|(id, _)| *id == d.id) {
+                        if !kinds.contains(&kind) {
+                            kinds.push(kind);
+                        }
+                    } else {
+                        groups.push((d.id.clone(), vec![kind]));
+                    }
+                }
+            }
+            for (id, kinds) in groups {
+                runtime
+                    .sensors
+                    .push(crate::ble_sensor::Worker::start(id, kinds, clock));
+            }
+        }
         if let Some(raw) =
             std::env::args().find_map(|a| a.strip_prefix("--ant-hr-config=").map(str::to_owned))
         {
@@ -661,5 +756,10 @@ pub fn run(
         }
     }
     runtime.drain_hr()?;
+    for sensor in &runtime.sensors {
+        if !sensor.stop() {
+            eprintln!("Bluetooth sensor cleanup timed out; receiver ends with worker process");
+        }
+    }
     result
 }

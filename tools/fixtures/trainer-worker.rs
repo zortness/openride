@@ -5,11 +5,17 @@ fn state(phase: &str, epoch: u64) {
     println!(r#"{{"event":"session_state","state":"{phase}","resume_epoch":{epoch},"can_resume":{}}}"#, phase == "paused");
 }
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    assert_eq!(args.get(1).map(String::as_str), Some("--device-id"));
+    assert_eq!(args.get(2).map(String::as_str), Some("synthetic-two"));
+    let pairing = args.iter().find_map(|a| a.strip_prefix("--pairing=")).expect("Selected roles missing");
+    assert!(pairing.contains("synthetic-two"));
     let path = std::env::args().find_map(|a| a.strip_prefix("--live-session=").map(str::to_owned)).unwrap();
     let route=std::env::args().find_map(|a|a.strip_prefix("--route-profile=").map(str::to_owned));
     if let Some(ref route)=route {assert!(std::path::Path::new(route).is_file());}
     if route.is_some() { assert!(std::env::args().any(|a|a.starts_with("--ant-hr-config="))); }
     emit(r#"{"event":"session_check_created"}"#);
+    println!(r#"{{"event":"selected_sources","roles":{pairing}}}"#);
     emit(r#"{"event":"command_acknowledged","opcode":7}"#);
     state(if route.is_some(){"paused"}else{"running"}, if route.is_some(){1}else{0});
     let mut epoch = if route.is_some(){1}else{0};

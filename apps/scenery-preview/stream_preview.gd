@@ -116,7 +116,7 @@ func _ready() -> void:
 		pacing.item_selected.connect(set_frame_pacing);controls.add_child(pacing)
 	title_label=Label.new();title_label.text="Riding preview | Simulated speed | No trainer" if riding_view else "Road streaming preview | No trainer";controls.add_child(title_label)
 	if riding_view and ClassDB.class_exists("RideSimulation"):
-		motion_selector=OptionButton.new();motion_selector.add_item("Constant speed");motion_selector.add_item("Power demo");motion_selector.add_item("Capture replay");motion_selector.add_item("Live SUITO")
+		motion_selector=OptionButton.new();motion_selector.add_item("Constant speed");motion_selector.add_item("Power demo");motion_selector.add_item("Capture replay");motion_selector.add_item("Live trainer")
 		motion_selector.item_selected.connect(set_motion_mode);controls.add_child(motion_selector)
 	finish_live=Button.new();finish_live.text="Finish ride";finish_live.hide();controls.add_child(finish_live)
 	finish_live.pressed.connect(func():
@@ -176,10 +176,15 @@ func _ready() -> void:
 		var ready_style:=StyleBoxFlat.new(); ready_style.bg_color=Color("10212bee"); ready_style.content_margin_left=48; ready_style.content_margin_top=48; ready_style.content_margin_right=48; ready_style.content_margin_bottom=48; readiness.add_theme_stylebox_override("panel",ready_style)
 		var ready_box:=VBoxContainer.new(); ready_box.add_theme_constant_override("separation",24); readiness.add_child(ready_box)
 		var ready_title:=Label.new(); ready_title.text="Ready to ride"; ready_title.add_theme_font_size_override("font_size",32); ready_box.add_child(ready_title)
-		var ready_label:=Label.new(); ready_label.text="Trainer: Elite SUITO / Bluetooth\nRider + bike: 85 kg total\nTrainer resistance: 0?2% for this first live version\n\nConnect, then choose Start ride when ready."; ready_box.add_child(ready_label)
+		var ready_label:=Label.new(); ready_label.text=live_ride.pairing_summary()+"\nRider + bike: 85 kg total\nTrainer resistance: 0?2% for this first live version\n\nConnect, then choose Start ride when ready."; ready_box.add_child(ready_label)
 		hr_settings=load("res://hr_settings.gd").new(); ready_box.add_child(hr_settings)
 		connect_ready=Button.new(); connect_ready.text="Connect trainer"; connect_ready.custom_minimum_size.y=52; ready_box.add_child(connect_ready)
-		connect_ready.pressed.connect(func(): live_ride.hr_config=hr_settings.selection(); readiness.hide(); toggle_play(); play.grab_focus())
+		connect_ready.pressed.connect(func():
+			var saved: Dictionary = JSON.parse_string(live_ride.bridge.pairing_selection())
+			if saved.has("error"): ready_label.text = str(saved.error); return
+			if saved.selection.get("heart_rate") != null and hr_settings.enabled.button_pressed:
+				ready_label.text = "Bluetooth heart rate is selected. Turn off ANT heart rate to connect."; return
+			live_ride.hr_config=hr_settings.selection(); readiness.hide(); toggle_play(); play.grab_focus())
 		await get_tree().process_frame
 		connect_ready.grab_focus()
 
@@ -574,8 +579,8 @@ func set_motion_mode(index:int) -> void:
 		simulated_speed=0;seek(0)
 	if live_mode:
 		live_ride=preload("res://live_ride.gd").new()
-		title_label.text="Live SUITO | 85 kg | Trainer 0-2%"
-		simulated_speed=0;seek(0);play.text="Connect SUITO"
+		title_label.text="Live trainer | 85 kg | Trainer 0-2%"
+		simulated_speed=0;seek(0);play.text="Connect trainer"
 	simulation_clock=Time.get_ticks_msec()
 	refresh_status()
 
@@ -698,7 +703,7 @@ func _process(delta: float) -> void:
 		motion_selector.disabled=live_ride.active()
 		finish_live.disabled=not live_ride.active() or live_ride.pending=="finish"
 		play.disabled=live_ride.active() and (live_ride.faulted or not live_ride.pending.is_empty() or not (live_ride.phase=="running" or (live_ride.phase=="paused" and live_ride.can_resume)))
-		play.text="Connect SUITO" if not live_ride.active() else ("Pause" if live_ride.phase=="running" else ("Resume" if live_ride.started else "Start ride"))
+		play.text="Connect trainer" if not live_ride.active() else ("Pause" if live_ride.phase=="running" else ("Resume" if live_ride.started else "Start ride"))
 		if not live_ride.state.is_empty():
 			simulated_speed=live_ride.state.speed_kph;seek(live_ride.state.distance_m)
 		if live_ride.route_complete:finish_route()
@@ -872,6 +877,9 @@ func verify_replay(path:String,snapshot:String) -> void:
 
 func verify_live(fixture:String,snapshot:String) -> void:
 	if not training_entry:set_motion_mode(3)
+	var fixture_device := {"id":"synthetic-two", "name":"Synthetic trainer"}
+	var pairing_error: String = live_ride.bridge.save_pairing(JSON.stringify({"schema":1,"resistance":fixture_device,"power":fixture_device,"cadence":fixture_device}))
+	if not pairing_error.is_empty(): fail(pairing_error); get_tree().quit(1); return
 	live_ride.worker_override=fixture
 	if readiness!=null:
 		hr_settings.enabled.button_pressed=true;hr_settings.number.value=42;hr_settings.transmission.value=241

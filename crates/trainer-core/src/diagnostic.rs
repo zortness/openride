@@ -68,6 +68,7 @@ impl SessionCheck {
         self.last_power_ms
             .is_some_and(|t| now_ms >= t && now_ms - t <= 3000)
     }
+    pub fn clear_power(&mut self) { self.last_power_ms=None; }
     pub fn start_acknowledged(&mut self, now_ms: u64) {
         self.running_since = Some(now_ms);
     }

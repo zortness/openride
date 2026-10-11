@@ -314,6 +314,7 @@ mod tests {
     fn crc_matches_standard_check_vector_and_full_file_residue() {
         assert_eq!(crc(b"123456789"), 0xbb3d);
         let a = Activity {
+            selected_sources: None,
             hr_config: None,
             hr_samples: vec![],
             route_config: None,

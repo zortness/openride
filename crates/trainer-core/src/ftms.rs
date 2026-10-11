@@ -26,7 +26,7 @@ pub fn features(data: &[u8]) -> Result<Features, String> {
     })
 }
 
-#[derive(Debug, Default, Serialize, PartialEq)]
+#[derive(Debug, Default, Clone, Serialize, PartialEq)]
 pub struct BikeData {
     pub more_data: bool,
     pub speed_kmh: Option<f64>,

@@ -19,6 +19,11 @@ pub struct Measurements {
     pub speed_kmh: Option<f64>,
     pub distance_m: Option<u32>,
     pub elapsed_s: Option<u16>,
+    pub power_received_ms: Option<u64>,
+    pub cadence_received_ms: Option<u64>,
+    pub hr_received_ms: Option<u64>,
+    #[serde(default)]
+    pub selected: bool,
 }
 #[derive(Debug, Clone)]
 pub struct Sample {
@@ -45,6 +50,7 @@ pub struct VirtualState {
 }
 #[derive(Debug)]
 pub struct Activity {
+    pub selected_sources: Option<Value>,
     pub hr_config: Option<Value>,
     pub hr_samples: Vec<(u64, Option<u8>)>,
     pub route_config: Option<Value>,
@@ -62,6 +68,7 @@ pub struct Activity {
 }
 #[derive(Debug, Serialize)]
 pub struct ExportReport {
+    pub selected_sources: Option<Value>,
     pub hr_config: Option<Value>,
     pub hr_samples: usize,
     pub schema: u32,
@@ -96,6 +103,7 @@ impl Activity {
         }
         let end = bytes.iter().rposition(|b| *b == b'\n').map_or(0, |i| i + 1);
         let mut a = Self {
+            selected_sources: None,
             hr_config: None,
             hr_samples: vec![],
             route_config: None,
@@ -140,7 +148,26 @@ impl Activity {
                 return Err("Duplicate journal header".into());
             }
             match event {
+                "selected_sources" => {
+                    if a.selected_sources.is_some() || first_start.is_some() || row["schema"] != 1 {
+                        return Err("Invalid selected source configuration".into());
+                    }
+                    let pairing = trainer_core::pairing::Pairing::parse(&row["roles"].to_string())?;
+                    if pairing.heart_rate.is_some() && a.hr_config.is_some() {
+                        return Err("Conflicting Bluetooth and ANT HR selections".into());
+                    }
+                    if !row["measurement_schema"].is_null() && row["measurement_schema"] != 1 {
+                        return Err("Unsupported selected measurement schema".into());
+                    }
+                    a.selected_sources = Some(row.clone());
+                }
                 "ant_hr_config" => {
+                    if a.selected_sources
+                        .as_ref()
+                        .is_some_and(|s| !s["roles"]["heart_rate"].is_null())
+                    {
+                        return Err("Conflicting Bluetooth and ANT HR selections".into());
+                    }
                     if a.hr_config.is_some()
                         || first_start.is_some()
                         || row["schema"] != 1
@@ -265,14 +292,42 @@ impl Activity {
                     }
                     _ => (),
                 },
-                "indoor_bike_data" => {
+                "indoor_bike_data" | "selected_measurements" => {
+                    let selected_mode = a
+                        .selected_sources
+                        .as_ref()
+                        .is_some_and(|s| s["measurement_schema"] == 1);
+                    if event == "indoor_bike_data" && selected_mode {
+                        previous = ms;
+                        continue;
+                    }
+                    if event == "selected_measurements" && !selected_mode {
+                        return Err("Selected measurements without source configuration".into());
+                    }
                     let received = number(&row, "received_ms")?;
                     if received > ms || received < last_received {
                         return Err("Invalid telemetry receipt time".into());
                     }
-                    let data: Measurements =
+                    let mut data: Measurements =
                         serde_json::from_value(row["decoded"]["Ok"].clone())
                             .map_err(|e| format!("Invalid decoded telemetry: {e}"))?;
+                    data.selected = selected_mode;
+                    if selected_mode {
+                        for (present, timestamp) in [
+                            (data.power_w.is_some(), data.power_received_ms),
+                            (data.cadence_rpm.is_some(), data.cadence_received_ms),
+                            (data.heart_rate_bpm.is_some(), data.hr_received_ms),
+                        ] {
+                            if timestamp.is_some_and(|t| t > received)
+                                || (present && timestamp.is_none_or(|t| received - t >= 3000))
+                            {
+                                return Err("Invalid or stale selected sensor timestamp".into());
+                            }
+                        }
+                        if data.heart_rate_bpm == Some(255) {
+                            return Err("Unsupported HR value".into());
+                        }
+                    }
                     if data.cadence_rpm.is_some_and(|v| !v.is_finite() || v < 0.0)
                         || data.speed_kmh.is_some_and(|v| !v.is_finite() || v < 0.0)
                     {
@@ -360,7 +415,9 @@ impl Activity {
         fn cell<T: ToString>(v: Option<T>) -> String {
             v.map_or(String::new(), |v| v.to_string())
         }
-        let mut out = String::from("timestamp_utc,journal_elapsed_ms,activity_elapsed_ms,timer_active,power_w,cadence_rpm,heart_rate_bpm,trainer_speed_kmh,trainer_distance_m,trainer_elapsed_s,acknowledged_grade_percent\n");
+        let mut out = String::from(
+            "timestamp_utc,journal_elapsed_ms,activity_elapsed_ms,timer_active,power_w,cadence_rpm,heart_rate_bpm,trainer_speed_kmh,trainer_distance_m,trainer_elapsed_s,acknowledged_grade_percent\n",
+        );
         for s in &self.samples {
             let d = &s.data;
             let grade = self
@@ -401,6 +458,20 @@ impl Activity {
         } else {
             Measurements::default()
         };
+        if data.selected {
+            if data
+                .cadence_received_ms
+                .is_none_or(|t| v.ms.saturating_sub(t) >= 3000)
+            {
+                data.cadence_rpm = None;
+            }
+            if data
+                .hr_received_ms
+                .is_none_or(|t| v.ms.saturating_sub(t) >= 3000)
+            {
+                data.heart_rate_bpm = None;
+            }
+        }
         if self.hr_config.is_some() {
             data.heart_rate_bpm = self.selected_hr(v.ms);
         }
@@ -455,7 +526,9 @@ impl Activity {
             .collect()
     }
     pub fn virtual_csv(&self) -> Result<String, String> {
-        let mut out=String::from("timestamp_utc,journal_elapsed_ms,timer_active,simulation_state,virtual_distance_m,virtual_speed_kmh,course_grade_percent,acknowledged_grade_percent,power_w,cadence_rpm,heart_rate_bpm\n");
+        let mut out = String::from(
+            "timestamp_utc,journal_elapsed_ms,timer_active,simulation_state,virtual_distance_m,virtual_speed_kmh,course_grade_percent,acknowledged_grade_percent,power_w,cadence_rpm,heart_rate_bpm\n",
+        );
         for v in &self.virtual_states {
             let s = self.virtual_sample(v);
             out.push_str(&format!(
@@ -503,6 +576,7 @@ pub fn export_with_manifest(
     let csv = activity.csv()?;
     let warnings = activity.warnings.clone();
     let mut report = ExportReport {
+        selected_sources: activity.selected_sources.clone(),
         schema: 4,
         hr_config: activity.hr_config.clone(),
         hr_samples: activity.hr_samples.len(),

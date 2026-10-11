@@ -1,5 +1,5 @@
-use activity_core::{export, Activity};
-use serde_json::{json, Value};
+use activity_core::{Activity, export};
+use serde_json::{Value, json};
 use std::collections::BTreeMap;
 fn journal(mut rows: Vec<Value>) -> Vec<u8> {
     rows.insert(0,json!({"event":"session_check_created","schema":1,"elapsed_ms":0,"utc_unix_ms":1700000000000u64}));
@@ -34,6 +34,60 @@ fn fixture() -> Vec<u8> {
         sample(6500, Some(0), None),
         complete(7000),
     ])
+}
+
+#[test]
+fn bluetooth_selected_samples_preserve_identity_and_expire_each_role() {
+    let trainer = json!({"id":"trainer","name":"T"});
+    let source = json!({"event":"selected_sources","schema":1,"measurement_schema":1,"elapsed_ms":0,
+        "roles":{"schema":2,"resistance":trainer,"power":{"id":"meter","name":"P","protocol":"cycling_power"},
+        "cadence":{"id":"cad","name":"C","protocol":"csc"},"heart_rate":{"id":"hr","name":"H","protocol":"heart_rate"}}});
+    let selected = |ms: u64| {
+        json!({"event":"selected_measurements","elapsed_ms":ms,"received_ms":ms,"decoded":{"Ok":{
+        "power_w":0,"power_received_ms":ms,"cadence_rpm":90.,"cadence_received_ms":1000,"heart_rate_bpm":120,"hr_received_ms":1500}}})
+    };
+    let route = json!({"event":"route_session_config","schema":1,"elapsed_ms":0,"route_sha256":"a".repeat(64),"package_manifest_sha256":"b".repeat(64)});
+    let rows = vec![
+        source.clone(),
+        route,
+        ack(1000, 7),
+        sample(1100, Some(999), Some(33.)),
+        selected(3900),
+        virtual_row(4100, 1., "running"),
+        virtual_row(4500, 2., "running"),
+        ack(5000, 8),
+        complete(5100),
+    ];
+    let a = Activity::parse(&journal(rows)).unwrap();
+    assert_eq!(a.samples.len(), 1);
+    assert_eq!(a.samples[0].data.power_w, Some(0));
+    assert_eq!(
+        a.selected_sources.as_ref().unwrap()["roles"]["power"]["id"],
+        "meter"
+    );
+    let samples = a.fit_samples();
+    assert_eq!(samples[0].data.cadence_rpm, None); // fresh snapshot cannot refresh older cadence
+    assert_eq!(samples[0].data.heart_rate_bpm, Some(120));
+    assert_eq!(samples[1].data.heart_rate_bpm, None);
+    assert!(
+        Activity::parse(&journal(vec![
+            source,
+            ack(1000, 7),
+            selected(4000),
+            ack(5000, 8),
+            complete(5100)
+        ]))
+        .is_err()
+    );
+    assert!(
+        Activity::parse(&journal(vec![
+            ack(1000, 7),
+            selected(3900),
+            ack(5000, 8),
+            complete(5100)
+        ]))
+        .is_err()
+    );
 }
 
 // Structural test decoder deliberately reads definitions, rather than sharing writer layouts.
@@ -260,9 +314,11 @@ fn virtual_export_requires_matching_profile_and_preserves_both_streams() {
     let output = root.join("export");
     std::fs::write(&source, virtual_fixture()).unwrap();
     std::fs::write(root.join("route-profile.json"), b"{}").unwrap();
-    assert!(export(&source, &output)
-        .unwrap_err()
-        .contains("hash mismatch"));
+    assert!(
+        export(&source, &output)
+            .unwrap_err()
+            .contains("hash mismatch")
+    );
     assert!(!output.exists());
     let bytes = String::from_utf8(virtual_fixture())
         .unwrap()
@@ -334,9 +390,11 @@ fn geographic_xml_exports_validate_origin_and_split_pauses() {
     std::fs::write(root.join("route-profile.json"), &profile).unwrap();
     let mp = root.join("package-manifest.json");
     std::fs::write(&mp, b"{}").unwrap();
-    assert!(export(&source, &root.join("bad"))
-        .unwrap_err()
-        .contains("manifest hash mismatch"));
+    assert!(
+        export(&source, &root.join("bad"))
+            .unwrap_err()
+            .contains("manifest hash mismatch")
+    );
     assert!(!root.join("bad").exists());
     std::fs::write(&mp, &manifest).unwrap();
     let report = export(&source, &root.join("good")).unwrap();
@@ -402,9 +460,11 @@ fn geographic_xml_exports_validate_origin_and_split_pauses() {
         raw.replace("\"distance_m\":8.0", "\"distance_m\":28.0"),
     )
     .unwrap();
-    assert!(export(&source, &root.join("beyond"))
-        .unwrap_err()
-        .contains("outside saved route"));
+    assert!(
+        export(&source, &root.join("beyond"))
+            .unwrap_err()
+            .contains("outside saved route")
+    );
     assert!(!root.join("beyond").exists());
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -447,9 +507,11 @@ fn selected_hr_expires_without_fallback_and_rejects_wrong_identity() {
     assert_eq!(a.samples[0].data.heart_rate_bpm, Some(199)); // raw BLE provenance unchanged
     let mut wrong = rows.clone();
     wrong[5]["transmission_type"] = json!(1);
-    assert!(Activity::parse(&journal(wrong))
-        .unwrap_err()
-        .contains("identity mismatch"));
+    assert!(
+        Activity::parse(&journal(wrong))
+            .unwrap_err()
+            .contains("identity mismatch")
+    );
     let mut future = rows.clone();
     future[5]["received_ms"] = json!(1300);
     assert!(Activity::parse(&journal(future)).is_err());

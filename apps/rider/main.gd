@@ -38,6 +38,8 @@ func _ready() -> void:
 	shell = preload("res://app_shell.gd").new(); add_child(shell); shell.add_to_group("app_shell"); shell.configure(self,source_screen)
 	if OS.get_cmdline_user_args().has("--verify-ux"):
 		verification = preload("res://ux_verification.gd").new(); verification.run.call_deferred(self); return
+	if OS.get_cmdline_user_args().has("--verify-discovery"):
+		verification = preload("res://discovery_verification.gd").new(); verification.run.call_deferred(get_tree()); return
 	if OS.get_cmdline_user_args().has("--verify-authoring"):
 		verification = preload("res://authoring_verification.gd").new()
 		verification.run.call_deferred(self); return
@@ -105,7 +107,8 @@ func _button(text: String, callback: Callable) -> Button:
 	return button
 
 func _build_ui() -> void:
-	var app_theme := Theme.new()
+	# Keep the scene's checkbox textures; project themes load before cold imports.
+	var app_theme: Theme = theme.duplicate()
 	app_theme.default_font_size = 15
 	app_theme.set_color("font_color", "Label", Color("dde8ed"))
 	theme = app_theme

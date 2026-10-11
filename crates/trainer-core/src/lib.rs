@@ -2,9 +2,12 @@
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 pub mod ant;
+pub mod ble_sensors;
 pub mod diagnostic;
+pub mod discovery;
 pub mod ftms;
 pub mod live;
+pub mod pairing;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Phase {

@@ -83,6 +83,8 @@ func configure(owner_app: Control, inspector: Control) -> void:
 	var settings := page("Settings"); pages.Settings = settings
 	label(settings,"Devices and tools",30)
 	label(settings,"Connect your trainer and optional heart-rate source from the ride setup screen.",18)
+	var discovery := preload("res://device_discovery.gd").new(); register(discovery,"Device discovery")
+	button(settings,"Discover devices / save diagnostics",func(): navigate(discovery))
 	button(settings,"Recorded device diagnostics",func(): navigate(app.device_monitor))
 	button(settings,"Inspect imported source files",func(): navigate(inspector))
 	button(settings,"Export a recording",func(): navigate(app.activity_export))
@@ -280,6 +282,9 @@ func _process(_delta: float) -> void:
 		pause_button.disabled = not ride.active() or not ride.pending.is_empty()
 		pause_button.text = "Pause ride" if ride.phase=="running" else "Resume ride"
 		if leave_after_finish and not ride.active():
+			# The worker can exit between the ride screen's poll and this frame.
+			# Drain completion/failure before hiding the screen disables its processing.
+			ride.poll()
 			leave_after_finish = false; ride_menu.hide(); finish_button.disabled = false
 			if quitting: get_tree().quit(); return
 			navigate(history,true)
