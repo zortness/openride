@@ -1,0 +1,24 @@
+import/
+/target/
+/dist/
+**/.godot/
+/apps/rider/bin/
+/local/
+export/
+
+/apps/rider/scenery/
+/apps/rider/editor/
+
+# Interpreter caches and local environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Local credentials and editor/export secrets
+.env
+.env.*
+!.env.example
+ant-network-key.txt
+export_credentials.cfg

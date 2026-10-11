@@ -1,0 +1,15 @@
+[package]
+name = "openride-godot"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+godot = { version = "0.4", default-features = false, features = ["api-4-5"] }
+ride-core = { path = "../ride-core" }
+serde_json = "1.0.151"
+activity-core = { path = "../activity-core" }

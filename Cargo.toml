@@ -1,0 +1,9 @@
+[workspace]
+members = ["crates/ride-core", "crates/godot-bridge", "crates/trainer-core", "crates/device-probe", "crates/activity-core", "crates/content-builder"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "MIT"
