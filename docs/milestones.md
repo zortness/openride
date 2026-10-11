@@ -142,6 +142,21 @@ Separate ready-for-friends acceptance from physical compatibility validation.
 M5 work and deferred endurance/dropout checks remain open. FE-C work overlaps M5
 and M6 and should be tracked once, with results linked from both milestones.
 
+## M7 — Full-route authoring and inspection
+
+Agreed 2026-10-11 as a separate milestone; implementation has not started.
+See the [M7 brief](m7-full-route-authoring.md). M6 remains open independently.
+
+Outcome: import a complete personal ride beyond the current 5 km authoring cap,
+inspect and repair it as one 3D project, and build one offline streamed package.
+Full-source inspection is already available; scalable scenery preparation is the
+new work. Begin with intake of a user-selected ride, then plan bounded acquisition
+and preparation that preserve continuous route distance and review decisions.
+
+Acceptance includes full-length offline traversal, inspection across scenery
+boundaries, resumable preparation, preserved original data and measured resource
+use. The first ride and supported size/resolution budgets remain to be selected.
+
 ## Later milestones
 
 See the [product backlog](backlog.md) for additional deferred requirements, including multiple rider/bike profiles and saved combinations. These items have no assigned milestone yet.

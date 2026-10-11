@@ -44,6 +44,9 @@ Future design questions: ownership/sharing of bike profiles, remembered/default 
 Related work: [M4 implementation](m4-progress.md). The current power demo uses an explicit 85 kg combined-mass assumption; adding these profiles is a separate future task.
 # Longer route authoring
 
+Assigned to [M7 — Full-route authoring and inspection](m7-full-route-authoring.md)
+on 2026-10-11; implementation has not started.
+
 - Replace the initial 5 km section cap with tiled terrain and OSM acquisition,
   resolution budgets, resumable per-tile preparation, and continuous stationing
   and review decisions across tile boundaries. Existing runtime chunk streaming
