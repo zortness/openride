@@ -21,6 +21,7 @@ fn main() {
     let mut epoch = if route.is_some(){1}else{0};
     let mut paused = route.is_some();
     let mut history = String::new();
+    let mut gear = 5i8;
     loop {
         let mut command = String::new();
         let count = io::stdin().read_line(&mut command).unwrap();
@@ -36,6 +37,16 @@ fn main() {
                 state("paused", epoch);
             }
             "finish" => break,
+            shift if shift.starts_with("shift ") => {
+                let fields: Vec<_> = shift.split_whitespace().collect();
+                assert_eq!(fields.len(), 3);
+                assert_eq!(fields[1].parse::<u64>().unwrap(), epoch);
+                assert!(!paused && route.is_some());
+                let direction: i8 = fields[2].parse().unwrap();
+                assert!(matches!(direction, -1 | 1));
+                gear = (gear + direction).clamp(1, 9);
+                println!(r#"{{"event":"shift_selection","virtual_gear":{gear},"accepted":true,"reason":"Fixture selected"}}"#);
+            }
             resume => {
                 assert_eq!(resume, format!("resume {epoch}"));
                 assert!(paused);

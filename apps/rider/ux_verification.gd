@@ -19,12 +19,12 @@ func run(app: Node) -> void:
 	var button: Button = app.get_viewport().gui_get_focus_owner()
 	if not check(button!=null and button.text.begins_with("Ride"),"Home initial focus",app): return
 	var accept := InputEventJoypadButton.new(); accept.button_index=JOY_BUTTON_A; accept.pressed=true
-	Input.parse_input_event(accept); await app.get_tree().process_frame
-	accept.pressed=false; Input.parse_input_event(accept); await app.get_tree().process_frame
+	Input.parse_input_event(accept.duplicate()); await app.get_tree().process_frame
+	accept.pressed=false; Input.parse_input_event(accept.duplicate()); await app.get_tree().process_frame
 	if not check(shell.stack[-1]==shell.pages.Ride,"Controller confirm route screen",app): return
 	var back_event := InputEventJoypadButton.new(); back_event.button_index=JOY_BUTTON_B; back_event.pressed=true
-	Input.parse_input_event(back_event); await app.get_tree().process_frame
-	back_event.pressed=false; Input.parse_input_event(back_event)
+	Input.parse_input_event(back_event.duplicate()); await app.get_tree().process_frame
+	back_event.pressed=false; Input.parse_input_event(back_event.duplicate())
 	if not check(shell.stack[-1]==shell.pages.Home,"Controller Back home",app): return
 	shell.axis=Vector2(0,1); shell.gamepad=true
 	Input.joy_connection_changed.emit(0,false)
@@ -32,8 +32,8 @@ func run(app: Node) -> void:
 	shell.navigate(app.route_workflow,true)
 	var initial_tab: int=app.route_workflow.tabs.current_tab
 	var shoulder := InputEventJoypadButton.new(); shoulder.button_index=JOY_BUTTON_RIGHT_SHOULDER; shoulder.pressed=true
-	Input.parse_input_event(shoulder); await app.get_tree().process_frame
-	shoulder.pressed=false; Input.parse_input_event(shoulder)
+	Input.parse_input_event(shoulder.duplicate()); await app.get_tree().process_frame
+	shoulder.pressed=false; Input.parse_input_event(shoulder.duplicate())
 	if not check(shell.stack[-1]==app.route_workflow and app.route_workflow.tabs.current_tab!=initial_tab,"Shoulder switches inner authoring tab",app): return
 	var picker := FileDialog.new(); picker.file_mode=FileDialog.FILE_MODE_OPEN_DIR; picker.access=FileDialog.ACCESS_FILESYSTEM
 	app.add_child(picker); picker.popup_centered(Vector2i(800,600))
@@ -84,6 +84,48 @@ func run(app: Node) -> void:
 		shell.pause_button.pressed.emit()
 		while runtime.live_ride.phase!="running" and Time.get_ticks_msec()<deadline: await app.get_tree().process_frame
 		if not check(runtime.live_ride.phase=="running","Menu resumes ride",app): return
+		shell.ride_menu.hide()
+		shoulder.pressed=true; Input.parse_input_event(shoulder.duplicate())
+		await app.get_tree().process_frame
+		while runtime.live_ride.shift_pending and Time.get_ticks_msec()<deadline: await app.get_tree().process_frame
+		if not check(runtime.live_ride.gear==6,"Shoulder shifts through worker: held=%s pending=%s focus=%s active_world=%s dialog=%s" % [shell.ride_inputs.held,runtime.live_ride.shift_pending,app.get_viewport().gui_get_focus_owner(),shell.active_world==world,shell.has_dialog()],app): return
+		Input.parse_input_event(shoulder.duplicate()); await app.get_tree().process_frame
+		if not check(runtime.live_ride.gear==6,"Held shoulder does not repeat",app): return
+		shoulder.pressed=false; Input.parse_input_event(shoulder.duplicate())
+		var easier := InputEventKey.new(); easier.physical_keycode=KEY_Q; easier.pressed=true
+		Input.parse_input_event(easier.duplicate())
+		await app.get_tree().process_frame
+		while runtime.live_ride.shift_pending and Time.get_ticks_msec()<deadline: await app.get_tree().process_frame
+		easier.pressed=false; Input.parse_input_event(easier.duplicate())
+		if not check(runtime.live_ride.gear==5 and runtime.live_ride.state.power_w==200 and runtime.live_ride.state.course_grade_percent==1.7,"Keyboard shift preserves power and route grade",app): return
+		var direction := InputEventKey.new(); direction.physical_keycode=KEY_J; direction.pressed=true
+		Input.parse_input_event(direction.duplicate()); direction.pressed=false; Input.parse_input_event(direction.duplicate())
+		await app.get_tree().process_frame
+		if not check(runtime.live_ride.shift_note.contains("no selectable junctions"),"Direction action explicitly unavailable on fixed route",app): return
+		var modal := AcceptDialog.new(); app.add_child(modal); modal.popup_centered()
+		shoulder.pressed=true; Input.parse_input_event(shoulder.duplicate()); shoulder.pressed=false; Input.parse_input_event(shoulder.duplicate())
+		await app.get_tree().process_frame
+		if not check(runtime.live_ride.gear==5 and not runtime.live_ride.shift_pending,"Dialog blocks shifts",app): return
+		modal.hide(); modal.queue_free(); await app.get_tree().process_frame
+		var menu := InputEventJoypadButton.new(); menu.button_index=JOY_BUTTON_START; menu.pressed=true
+		Input.parse_input_event(menu.duplicate()); menu.pressed=false; Input.parse_input_event(menu.duplicate())
+		await app.get_tree().process_frame
+		if not check(shell.ride_menu.visible,"Start opens ride menu",app): return
+		shoulder.pressed=true; Input.parse_input_event(shoulder.duplicate()); shoulder.pressed=false; Input.parse_input_event(shoulder.duplicate())
+		await app.get_tree().process_frame
+		if not check(runtime.live_ride.gear==5 and not runtime.live_ride.shift_pending,"Menu blocks shifts",app): return
+		menu.pressed=true; Input.parse_input_event(menu.duplicate()); menu.pressed=false; Input.parse_input_event(menu.duplicate())
+		await app.get_tree().process_frame
+		var pause := InputEventKey.new(); pause.physical_keycode=KEY_P; pause.pressed=true
+		Input.parse_input_event(pause.duplicate()); pause.pressed=false; Input.parse_input_event(pause.duplicate())
+		while runtime.live_ride.phase!="paused" and Time.get_ticks_msec()<deadline: await app.get_tree().process_frame
+		if not check(runtime.live_ride.phase=="paused","Keyboard pauses ride",app): return
+		shoulder.pressed=true; Input.parse_input_event(shoulder.duplicate()); shoulder.pressed=false; Input.parse_input_event(shoulder.duplicate())
+		if not check(not runtime.live_ride.shift_pending,"Paused ride ignores shifts",app): return
+		pause.pressed=true; Input.parse_input_event(pause.duplicate()); pause.pressed=false; Input.parse_input_event(pause.duplicate())
+		while runtime.live_ride.phase!="running" and Time.get_ticks_msec()<deadline: await app.get_tree().process_frame
+		if not check(runtime.live_ride.phase=="running","Keyboard explicitly resumes ride",app): return
+		shell.back()
 		shell.pause_button.pressed.emit()
 		while runtime.live_ride.phase!="paused" and Time.get_ticks_msec()<deadline: await app.get_tree().process_frame
 		if not check(runtime.live_ride.phase=="paused","Menu pauses ride",app): return
@@ -101,13 +143,13 @@ func run(app: Node) -> void:
 		if not check(shell.stack[-1]==world and world.get_parent()==shell.body,"Embedded editor",app): return
 		var yaw: float=editor.yaw
 		var stick := InputEventJoypadMotion.new(); stick.axis=JOY_AXIS_LEFT_X; stick.axis_value=0.8
-		Input.parse_input_event(stick)
+		Input.parse_input_event(stick.duplicate())
 		for i in range(5): await app.get_tree().process_frame
-		stick.axis_value=0; Input.parse_input_event(stick)
+		stick.axis_value=0; Input.parse_input_event(stick.duplicate())
 		if not check(editor.yaw!=yaw and shell.axis==Vector2.ZERO,"Left stick orbits instead of moving focus",app): return
 		var tool_tab: int=editor.inspector_tabs.current_tab
-		shoulder.pressed=true; Input.parse_input_event(shoulder); await app.get_tree().process_frame
-		shoulder.pressed=false; Input.parse_input_event(shoulder)
+		shoulder.pressed=true; Input.parse_input_event(shoulder.duplicate()); await app.get_tree().process_frame
+		shoulder.pressed=false; Input.parse_input_event(shoulder.duplicate())
 		if not check(shell.stack[-1]==world and editor.inspector_tabs.current_tab!=tool_tab and editor.inspector.visible,"Shoulder opens and switches editor tools",app): return
 		editor.slider.value=110; editor._focus_point()
 		var radius: float = editor.radius; var position: float = editor.slider.value

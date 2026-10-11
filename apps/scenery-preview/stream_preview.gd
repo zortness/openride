@@ -677,7 +677,8 @@ func refresh_status() -> void:
 		elif power_demo:hud_power=speed.value
 		hud.display(hud_power,cadence,hr,simulated_speed if live_mode or power_demo or capture_replay else (speed.value if traversal.playing else 0.0),seconds,traversal.length_m-sample.distance_m,sample.grade_percent)
 		if live_mode and live_ride!=null:
-			status.text=live_ride.note
+			status.text=live_ride.note+"\n"+live_ride.gearing_text()+"\nQ/E or shoulders: easier/harder | P/Y: pause/resume | Esc/Start: menu"
+			if not live_ride.shift_note.is_empty(): status.text += "\n"+live_ride.shift_note
 			if live_ride.hr_status!="off" and hr==null:status.text+=" ? HR "+("unavailable" if live_ride.hr_status=="unavailable" else "searching")
 		elif capture_replay:status.text="Capture replay ? "+str(replay_state.get("status","")).replace("_"," ")+" "+simulation_note
 		elif power_demo:status.text="Power demo ? "+simulation_note

@@ -2,7 +2,8 @@
 
 Status: implementation started 2026-10-11 with read-only paired BLE discovery,
 capability diagnostics, saved source roles and independent Bluetooth HR, power
-and cadence reception. See
+and cadence reception. Initial keyboard/gamepad ride actions and bounded FTMS
+shifting are implemented as a prototype awaiting physical evaluation. See
 [M6 progress](m6-progress.md) for implemented scope and verification;
 physical sensor/trainer compatibility remains open.
 This brief follows the repository's existing documentation layout.

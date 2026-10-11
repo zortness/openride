@@ -28,6 +28,9 @@ impl Lifecycle {
     pub fn running(&mut self) {
         self.state = State::Running;
     }
+    pub fn can_shift(&self, epoch: u64, fresh: bool) -> bool {
+        self.state == State::Running && self.epoch == epoch && fresh
+    }
     pub fn finish(&mut self) {
         self.state = State::Finished;
     }
@@ -39,12 +42,17 @@ mod tests {
     fn resume_needs_current_pause_token_and_fresh_data() {
         let mut s = Lifecycle::default();
         s.running();
+        assert!(s.can_shift(0, true));
+        assert!(!s.can_shift(0, false));
         assert!(!s.can_resume(0, true));
         s.paused();
+        assert!(!s.can_shift(0, true));
         assert!(!s.can_resume(0, true));
         assert!(!s.can_resume(1, false));
         assert!(s.can_resume(1, true));
         s.running();
+        assert!(!s.can_shift(0, true));
+        assert!(s.can_shift(1, true));
         assert!(!s.can_resume(1, true));
         s.paused();
         assert!(!s.can_resume(1, true));

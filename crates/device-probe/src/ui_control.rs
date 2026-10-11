@@ -3,6 +3,7 @@ use std::{collections::VecDeque, sync::Mutex};
 pub enum Command {
     Pause,
     Resume(u64),
+    Shift(u64, i8),
 }
 #[derive(Default)]
 pub struct Inbox {
@@ -20,6 +21,18 @@ impl Inbox {
         }
         let command = if line == "pause" {
             Some(Command::Pause)
+        } else if let Some(args) = line.strip_prefix("shift ") {
+            let parts: Vec<_> = args.split_whitespace().collect();
+            if parts.len() == 2 {
+                parts[0]
+                    .parse()
+                    .ok()
+                    .zip(parts[1].parse::<i8>().ok())
+                    .filter(|(_, direction)| matches!(direction, -1 | 1))
+                    .map(|(epoch, direction)| Command::Shift(epoch, direction))
+            } else {
+                None
+            }
         } else {
             line.strip_prefix("resume ")
                 .and_then(|s| s.parse().ok())
@@ -83,6 +96,20 @@ mod tests {
         assert_eq!(inbox.finish_reason(), Some("control_queue_overflow"));
         let mut inbox = Inbox::default();
         inbox.receive("resume nonsense");
+        assert_eq!(inbox.finish_reason(), Some("invalid_control_command"));
+    }
+    #[test]
+    fn shifts_are_bounded_commands_and_stop_wins() {
+        let mut inbox = Inbox::default();
+        inbox.receive("shift 3 -1");
+        assert_eq!(inbox.pop(), Some(Command::Shift(3, -1)));
+        inbox.receive("shift 3 1");
+        inbox.receive("pause");
+        assert!(inbox.stop_pending());
+        inbox.receive("finish");
+        assert_eq!(inbox.pop(), None);
+        let mut inbox = Inbox::default();
+        inbox.receive("shift 3 5");
         assert_eq!(inbox.finish_reason(), Some("invalid_control_command"));
     }
 }

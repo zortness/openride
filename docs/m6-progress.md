@@ -141,13 +141,61 @@ or automatic resume, selected export samples, saved sensor assignments, BLE/ANT 
 conflict rejection and live display ignoring unselected raw trainer values.
 These are synthetic/fake-worker checks, not physical sensor validation.
 
+## Initial shifting and ride actions
+
+Keyboard/gamepad ride actions now reach the same worker that owns terrain
+control. This first backend is a bounded grade-offset prototype, not native
+trainer gearing or a model of transmission ratios. It is intended for supervised
+evaluation on the Suito in a fixed physical gear; physical shift feel is unverified.
+
+| Action | Keyboard | Gamepad |
+|---|---|---|
+| Easier / harder | Q / E | Left / right shoulder |
+| Pause / explicit resume | P | North button (Y) |
+| Ride menu | Escape | Start |
+| Confirm / back | Enter / Escape (Backspace during ride) | South / east button |
+| Reserved left / straight / right choice | J / K / L | D-pad left / up / right |
+
+Direction actions report that the current fixed route has no selectable junctions;
+they do not alter the route. Existing focus, editor and file-dialog controls retain
+their contexts. Shifts are blocked by menus/dialogs, text entry, paused/finishing
+state and outstanding shift responses. Button holds do not repeat shifts; screen
+changes, loss of window focus and controller disconnect clear held input state.
+Keyboard remains usable after gamepad disconnect. Controller selection/remapping,
+Click and OpenBikeControl adapters remain future work.
+
+Each connection begins in gear 5 of 9. Each step offsets the already bounded
+terrain request by 0.25 percentage points; the result remains within 0–2%.
+At either load boundary, different gears can request the same load. Gear selection
+persists through pause/resume within the session; pause still restores flat load,
+and resuming starts flat before the existing paced scheduler applies the target.
+The existing one-second acknowledgement spacing and maximum one-percentage-point
+step are retained. Shifts require the current running-state token and fresh power;
+a queued pause or finish wins. Missing power never triggers automatic resume.
+
+The display distinguishes selected gear, load target and acknowledged load. The
+journal records selections and target commands; route geography, course grade,
+measured power and simulation physics are not changed by shifting. No separate
+command writer or native gear protocol is introduced.
+
+Verification (2026-10-11): Rust workspace tests and all 68 Python tests passed.
+Release build and Windows export exited 0. Exported fake-worker checks returned
+`UX_RIDE_OK`, `UX_OK`, `DEVICE_DISCOVERY_OK` and `TRAINER_SESSION_OK` with exit 0
+and no error logs. New checks cover bounded gears and acknowledgement pacing,
+freshness/state-token guards, stop precedence, keyboard/shoulder shifting,
+held-button suppression, menu/dialog isolation, direction-unavailable feedback
+and explicit pause/resume. The UI fixture retains its power and course-grade
+values across shifts. No physical trainer commands were sent.
+
 ## Next slices and open gates
 
 - Validate independent Bluetooth HR, Cycling Power and CSC sensors physically,
   including simultaneous trainer reception, dropout/reconnection and exports.
 - Add nearby unpaired discovery and selectable controller input roles.
-- Complete the friend package with a sample route and setup guide, then virtual
-  shifting and per-model physical testing as ordered in the M6 brief.
+- Physically evaluate the bounded shifting prototype on Suito; establish the gear
+  model/range and CORE/Cog backend before claiming usable single-cog shifting.
+- Complete the friend package with a sample route and setup guide, controller
+  adapters and per-model physical testing as ordered in the M6 brief.
 - No friend trainer or independent Bluetooth sensor has been physically verified.
   Neither M6 readiness nor compatibility acceptance is complete. M2/M5 endurance,
   dropout, cadence, and simultaneous trainer/ANT-HR gates remain deferred/open.

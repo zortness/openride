@@ -185,6 +185,10 @@ impl Runtime<'_> {
         if let Some(ride) = &self.ride {
             let mut row = ride.snapshot();
             row["acknowledged_grade_percent"] = json!(f64::from(self.grade.acknowledged) / 100.);
+            row["virtual_gear"] = json!(self.grade.gear());
+            row["load_target_percent"] = json!(if ride.status() == "running" {
+                self.grade.load_percent(ride.grade_percent())
+            } else { 0. });
             self.log(row)?;
             self.ride_record_ms = self.ms();
         }
@@ -407,6 +411,19 @@ impl Runtime<'_> {
             }
             let command = INBOX.lock().unwrap().pop();
             match command {
+                Some(Command::Shift(epoch, direction)) => {
+                    let fresh = self.policy.fresh(self.ms()) && self.ride.as_ref()
+                        .is_some_and(|r| r.status() == "running" && r.fresh_power(self.ms()).is_some());
+                    let accepted = lifecycle.can_shift(epoch, fresh)
+                        && !INBOX.lock().unwrap().stop_pending();
+                    let changed = accepted && self.grade.shift(direction);
+                    self.log(json!({"event":"shift_selection","direction":direction,
+                        "resume_epoch":epoch,"accepted":accepted,"changed":changed,
+                        "virtual_gear":self.grade.gear(),"backend":"bounded_grade_offset",
+                        "reason":if !accepted { "Requires current running state and fresh power without a pending stop" }
+                            else if !changed { "Gear limit" } else { "Selected; trainer load awaits acknowledgement" }}))?;
+                    self.record_ride()?;
+                }
                 Some(Command::Pause) => {
                     self.log(json!({"event":"ui_command","command":"pause"}))?;
                     self.flat_pause()?;
@@ -455,7 +472,7 @@ impl Runtime<'_> {
             {
                 let course = self.ride.as_ref().unwrap().grade_percent();
                 if let Some(grade) = self.grade.target(self.ms(), course) {
-                    self.log(json!({"event":"route_grade_target","course_grade_percent":course,"commanded_grade_percent":f64::from(grade)/100.}))?;
+                    self.log(json!({"event":"route_grade_target","course_grade_percent":course,"virtual_gear":self.grade.gear(),"load_target_percent":self.grade.load_percent(course),"commanded_grade_percent":f64::from(grade)/100.}))?;
                     if !INBOX.lock().unwrap().stop_pending() {
                         self.procedure(
                             trainer_core::route_grade::RouteGrade::request(grade).map_err(error)?,

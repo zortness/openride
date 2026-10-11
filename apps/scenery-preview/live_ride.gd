@@ -22,6 +22,17 @@ var hr_bpm: Variant = null
 var hr_status := "off"
 var hr_deadline := 0
 var ble_hr_unavailable := false
+var gear := 5
+var shift_note := ""
+var shift_pending := false
+
+func shift(direction: int) -> void:
+	if not active() or phase != "running" or not pending.is_empty() or faulted or shift_pending: return
+	shift_pending = true
+	bridge.shift_session(epoch,direction)
+
+func gearing_text() -> String:
+	return "Gear %d/9 | load %.2f%% / acknowledged %.2f%%" % [gear,float(state.get("load_target_percent",0)),float(state.get("acknowledged_grade_percent",0))]
 
 func _init() -> void:
 	bridge.configure_pairing_path(ProjectSettings.globalize_path("user://pairing.json"))
@@ -51,6 +62,7 @@ func connect_trainer(route_path:String,expected_sha256:String,package_sha256:Str
 	directory=ProjectSettings.globalize_path("user://sessions").path_join("route-%s-%s" % [str(Time.get_unix_time_from_system()).replace(".","-"),str(Time.get_ticks_usec())])
 	bridge.configure_heart_rate(hr_config)
 	ble_hr_unavailable = false
+	gear = 5; shift_note = ""; shift_pending = false
 	cadence=null;ride_start_ms=-1;elapsed_ms=0
 	hr_bpm=null;hr_status="off" if hr_config.is_empty() and saved.selection.get("heart_rate") == null else "searching"
 	if not bridge.start_route_session(executable,directory,route_path,expected_sha256,package_sha256):
@@ -92,9 +104,13 @@ func poll() -> void:
 			"ant_hr_status":
 				hr_status=row.get("status","searching")
 				if hr_status!="receiving":hr_bpm=null
-			"virtual_state":state=row
+			"virtual_state":
+				state=row; gear=int(row.get("virtual_gear",gear))
+			"shift_selection":
+				gear=int(row.virtual_gear); shift_note=str(row.reason); shift_pending=false
 			"session_state":
 				phase=row.state
+				if phase != "running": shift_pending=false
 				if phase=="running" and ride_start_ms<0:ride_start_ms=elapsed_ms
 				epoch=int(row.resume_epoch);can_resume=row.can_resume
 				started=row.get("start_acknowledged",started or phase=="running")

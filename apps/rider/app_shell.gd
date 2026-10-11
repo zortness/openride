@@ -28,6 +28,7 @@ var recent_count := -1
 var tab_buttons: Array[Button] = []
 var ride_shade: ColorRect
 var recent_routes: VBoxContainer
+var ride_inputs := preload("res://ride_inputs.gd").new()
 
 func configure(owner_app: Control, inspector: Control) -> void:
 	app = owner_app
@@ -88,13 +89,16 @@ func configure(owner_app: Control, inspector: Control) -> void:
 	button(settings,"Recorded device diagnostics",func(): navigate(app.device_monitor))
 	button(settings,"Inspect imported source files",func(): navigate(inspector))
 	button(settings,"Export a recording",func(): navigate(app.activity_export))
+	label(settings,"Live ride: Q/E or shoulders shift easier/harder; P or north button pauses/resumes.\nEsc or Start opens the ride menu. Nine load steps; gear 5 is neutral.\nJ/K/L or D-pad left/up/right reserve direction choices; junction navigation is not available.",18)
 	label(settings,"Controller: D-pad moves focus; south button confirms; east button returns.\nShoulders change inner tabs when available, otherwise main sections.\nEditor: left stick orbits, right stick pans, triggers zoom. Elsewhere left stick moves focus.\nFile dialogs: shoulders cycle fields and Open / Cancel. Text entry uses the keyboard.",18)
 	button(app.route_workflow.tabs.get_child(0),"Inspect source samples / export a section",func(): navigate(inspector))
 	history.refresh()
 	build_ride_menu()
 	get_tree().auto_accept_quit = false
 	get_tree().root.close_requested.connect(request_quit)
-	Input.joy_connection_changed.connect(func(_device: int, connected: bool):
+	get_tree().root.focus_exited.connect(func(): ride_inputs.held.clear())
+	Input.joy_connection_changed.connect(func(device: int, connected: bool):
+		if not connected: ride_inputs.disconnected(device)
 		hints.text = "Controller connected" if connected else "Controller disconnected — keyboard and mouse remain available"
 		if not connected: axis=Vector2.ZERO; next_repeat=0; gamepad=false)
 	for action in ["ui_left","ui_right","ui_up","ui_down"]: InputMap.action_set_deadzone(action,0.35)
@@ -128,6 +132,7 @@ func register(screen: Control, title: String) -> void:
 		if not switching and not screen.visible and not stack.is_empty() and stack[-1]==screen: back())
 
 func navigate(screen: Control, top := false) -> void:
+	ride_inputs.held.clear()
 	axis = Vector2.ZERO; next_repeat = 0
 	if active_world!=null and is_instance_valid(active_world) and active_world.active_ride() and screen!=active_world:
 		show_ride_menu(); return
@@ -242,11 +247,14 @@ func change_section(direction: int) -> void:
 		navigate(values[posmod(values.find(stack[-1])+direction,values.size())],true)
 
 func _input(event: InputEvent) -> void:
+	var ride_action: String = ride_inputs.decode(event)
 	if event is InputEventJoypadButton or event is InputEventJoypadMotion:
 		gamepad = true; hints.text = "D-pad: focus   Left stick: orbit   Right stick: pan   Shoulders: tool tabs" if editor_orbit_active() else "D-pad / left stick: move   South: select   East: back   Shoulders: current tabs"
 	elif event is InputEventKey and event.device!=-10:
 		gamepad = false; hints.text = "Arrow keys / Tab: move   Enter: select   Esc: back"
 	if has_dialog(): axis=Vector2.ZERO; next_repeat=0; return
+	if not ride_action.is_empty() and handle_ride_action(ride_action):
+		get_viewport().set_input_as_handled(); return
 	if event.is_action_pressed("ui_cancel"):
 		if ride_menu.visible: ride_menu.hide(); quitting = false
 		else: back()
@@ -261,7 +269,27 @@ func _input(event: InputEvent) -> void:
 		if axis.length()<0.35: next_repeat = 0
 		get_viewport().set_input_as_handled()
 
+func handle_ride_action(action: String) -> bool:
+	if not is_instance_valid(active_world) or stack.is_empty() or stack[-1] != active_world: return false
+	var ride = active_world.content.live_ride
+	if ride == null or not ride.active(): return false
+	var focus = get_viewport().gui_get_focus_owner()
+	if focus is LineEdit or focus is TextEdit: return false
+	if action == "or_menu" or action == "or_back":
+		if ride_menu.visible: ride_menu.hide(); quitting=false
+		else: back()
+		return true
+	if ride_menu.visible: return false
+	match action:
+		"or_shift_down", "or_shift_up": ride.shift(-1 if action == "or_shift_down" else 1)
+		"or_pause": ride.toggle()
+		"or_choose_left", "or_choose_straight", "or_choose_right":
+			ride.shift_note = "This route has no selectable junctions."
+		_: return false
+	return true
+
 func _process(_delta: float) -> void:
+	if has_dialog(): ride_inputs.held.clear()
 	if gamepad and axis.length()>=0.5 and Time.get_ticks_msec()>=next_repeat and not has_dialog() and not editor_orbit_active():
 		var key := InputEventKey.new(); key.pressed = true
 		key.device = -10

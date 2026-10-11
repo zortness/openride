@@ -119,6 +119,13 @@ impl TrainerSession {
         }
     }
     #[func]
+    fn shift_session(&self, epoch: i64, direction: i64) {
+        if epoch < 0 || !matches!(direction, -1 | 1) { return; }
+        if let Some(tx) = &self.commands {
+            let _ = tx.send(format!("shift {epoch} {direction}"));
+        }
+    }
+    #[func]
     fn resume_session(&self, epoch: i64) {
         if epoch < 0 {
             return;
