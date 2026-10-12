@@ -37,6 +37,13 @@ resuming interrupted preparation without discarding completed valid work. Record
 build time, output size and runtime resource measurements on the test machine.
 The user confirms the result is useful for full-ride inspection.
 
+Transferred from M2/M3 on 2026-10-11: complete a continuous 30-minute supervised
+ride on sufficiently long content, recording telemetry freshness, control
+acknowledgements and the resulting activity. Measure frame-time distribution,
+loading stalls, peak memory and GPU residency on a named reference machine;
+address performance issues against budgets agreed before evaluation. These gates
+remain unverified despite M2/M3 closure. No separate M8 is currently assigned.
+
 ## Architectural Decisions
 
 ### Bound work geographically while preserving one route
@@ -86,7 +93,8 @@ requirement IDs have been assigned.
 
 Full-ride intake and inspection; scalable terrain/map acquisition; imagery coverage
 consistent with the larger project; resumable preparation; continuous route
-distance and repairs; one streamed package; boundary and resource validation.
+distance and repairs; one streamed package; boundary and resource validation;
+30-minute ride acceptance and performance improvements transferred from M2/M3.
 
 ### Out of Scope
 
@@ -118,6 +126,11 @@ Regress short-route authoring and saved repairs. Exercise the chosen full ride
 end to end, inspecting terrain/road continuity and measuring build and runtime
 resources. Personal recordings and geographic exports remain private test inputs.
 
+The endurance test requires actual supervised trainer riding, not simulated
+playback. Record equipment, duration, telemetry gaps, control responses and export
+results. Performance checks include movement waits at chunk boundaries and
+whole-route metadata growth as well as frame times and CPU/GPU memory.
+
 ## Acceptance Criteria
 
 - The selected complete ride imports without truncation at 5 km.
@@ -128,6 +141,10 @@ resources. Personal recordings and geographic exports remain private test inputs
 - One package validates, installs and supports full-length offline traversal.
 - Resource measurements and supported limits are documented; short routes regress
   successfully.
+- A continuous 30-minute supervised ride completes with recorded control responses,
+  telemetry freshness and an inspectable activity export.
+- Frame pacing, chunk-loading stalls and memory/GPU residency are measured on a
+  named machine and assessed against agreed budgets; remaining issues are explicit.
 
 ## Open Questions
 

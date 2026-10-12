@@ -2,6 +2,12 @@
 
 Status: started 2026-10-10, following user acceptance of the full RPV ride and single-file FIT/TCX imports in GoldenCheetah 3.8.
 
+Scope update (2026-10-11): M2 and M3 are now closed by user acceptance. Export
+validation and trainer disconnect/reconnect are user-confirmed. The 30-minute
+endurance test and reference-hardware performance follow-ups move to M7.
+Separate sensor dropout, cadence and simultaneous trainer/ANT-HR validation
+remain open in M5/M6. Earlier endurance deferrals below are historical.
+
 ## First slice: ANT adapter and sensor reception
 
 Implemented a standalone Rust receive diagnostic in `device-probe`. Bluetooth remains the riding application's only trainer controller. No FE-C channel, resistance command, automatic source replacement or ride integration is added in this slice.

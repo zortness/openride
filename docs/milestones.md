@@ -1,6 +1,6 @@
 # Proposed milestone roadmap
 
-Status: M1 is complete; see [M1 progress](m1-progress.md) for verification and the engine decision. [M2 implementation](m2-progress.md) remains in progress with deferred hardware acceptance. [M3 scenery preparation](m3-progress.md) has started. [M4 offline ride](m4-progress.md) is accepted for the tested Windows/Suito BLE/RPV setup, including single-file FIT/TCX imports in GoldenCheetah 3.8. [M5 hardware/content hardening](m5-progress.md) has started with the ANT receive diagnostic. Later milestones remain proposed.
+Status (2026-10-11): M1 is complete; M2 and M3 are closed by user acceptance; M4 is accepted for the tested Windows/Suito BLE/RPV setup. M5 remains in progress, M6 is active, and M7 is planned. The M2 30-minute endurance test and M3 performance follow-ups now belong to M7. See the linked milestone progress documents for evidence and scope limits.
 
 Audience: the project owner and contributors selecting the next bounded piece of work. Read the [project plan](project-plan.md) for scope and architecture. Milestones are defined by observable outcomes; estimates should follow the first feasibility findings.
 
@@ -31,6 +31,12 @@ Boundary: this is a route inspection application, not a finished 3D world editor
 
 ## M2 — Reliable trainer session without scenery
 
+Closed by user acceptance (2026-10-11). The user confirmed export validation and
+trainer disconnect/reconnect testing during the ANT-device investigation. The
+30-minute endurance test moves to M7; it is not claimed as passed. Separate sensor
+fault validation remains in M5/M6. The original scope and historical acceptance
+criteria below are retained; see [M2 closure](m2-progress.md).
+
 Outcome: run a supervised Suito session with observable telemetry, controlled simulation requests, and recoverable recording.
 
 Scope:
@@ -55,6 +61,12 @@ Scheduling update (2026-10-09): the user deferred the 30-minute ride and deliber
 Dependency: M1 establishes the application/native integration. Hardware scheduling can influence order, but device work must not hold up source-data investigation. Heart-rate availability is not a prerequisite for testing trainer control; any unavailable sensor remains an explicit unverified item.
 
 ## M3 — Build, correct, and share one 3D route package
+
+Closed by user acceptance (2026-10-11). Current authoring, corrections, packaging
+and streamed preview are accepted. Outstanding reference-machine measurements,
+GPU/memory checks, frame pacing and loading improvements move to M7; no new
+performance result is implied. See [M3 closure](m3-progress.md). Earlier scheduling
+and acceptance statements below describe the implementation history.
 
 Outcome: produce a small RPV scenery package with the standalone builder, inspect it visually, and install it in the exported client independently.
 
@@ -139,7 +151,8 @@ Recommended sequence:
 6. Investigate Echelon capabilities; choose a bounded adapter/bridge or manual mode.
 
 Separate ready-for-friends acceptance from physical compatibility validation.
-M5 work and deferred endurance/dropout checks remain open. FE-C work overlaps M5
+M5 work and separate sensor-dropout checks remain open; endurance moves to M7.
+M2 trainer disconnect/reconnect is user-confirmed. FE-C work overlaps M5
 and M6 and should be tracked once, with results linked from both milestones.
 
 ## M7 — Full-route authoring and inspection
@@ -156,6 +169,10 @@ and preparation that preserve continuous route distance and review decisions.
 Acceptance includes full-length offline traversal, inspection across scenery
 boundaries, resumable preparation, preserved original data and measured resource
 use. The first ride and supported size/resolution budgets remain to be selected.
+
+Transferred on 2026-10-11: the continuous 30-minute supervised ride from M2 and
+performance measurement/improvements from M3, including frame pacing, chunk
+loading, memory and GPU residency. These are M7 gates, not completed results.
 
 ## Later milestones
 

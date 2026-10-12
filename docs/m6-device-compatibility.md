@@ -51,8 +51,9 @@ resistance response where supported, ride completion and exported data.
 CORE/Cog shifting requires physical validation before declaring that setup usable.
 Each target retains its own status; the overall gate does not certify all three.
 
-Existing deferred endurance and deliberate dropout tests remain open. This
-milestone does not silently close M2/M5 acceptance or establish broad reliability.
+M2 is closed by user acceptance of export and trainer disconnect/reconnect
+validation (2026-10-11). The 30-minute endurance test moves to M7. Separate sensor
+dropout and M5 hardware gates remain open; M6 does not establish broad reliability.
 
 ## Architectural Decisions
 

@@ -1,5 +1,20 @@
 # M3: scenery preparation
 
+## Closure — 2026-10-11
+
+Status: closed by user acceptance of the current route-authoring, correction,
+package and streamed-preview workflow. Reference-machine benchmarking, GPU/memory
+measurements, frame pacing and chunk-loading performance improvements move to M7
+alongside full-route authoring. This is a scope/acceptance decision, not a claim
+that the outstanding benchmarks passed or that minimum hardware is established.
+No separate M8 is assigned at this point. Further scenery detail remains backlog
+work rather than a prerequisite for this closure.
+
+The dated implementation history below is retained; earlier statements that M3
+acceptance or performance gates remain open are superseded by this decision.
+
+## Implementation history
+
 Transition accepted (2026-10-10): the user considers current performance adequate to move forward. [M4](m4-progress.md) has started with the Rust power-simulation demonstration. Remaining hardware benchmarks and loading refinements are follow-ups rather than blockers to M4 implementation.
 
 Frame pacing update (2026-10-10): the [pacing investigation](m3-frame-pacing.md) supports a 60 FPS cap with VSync off on the development machine; VSync remains selectable. Full-route exported playback measured p95 16.722 ms and p99 17.020 ms, with bounded chunks. Thirty terrain-wait frames remain a separate movement-loading issue. Reference-machine/GPU residency acceptance remains open.

@@ -1,5 +1,24 @@
 # M2: trainer session implementation
 
+## Closure — 2026-10-11
+
+Status: closed by user acceptance for the tested Windows/Suito setup. The user
+confirmed completed export validation and reported physically disconnecting and
+reconnecting the trainer during the ANT-device identification investigation.
+This is user-reported evidence; no new capture or decoder run was inspected for
+this closure, and no additional hardware test was run.
+
+The continuous 30-minute ride is transferred to M7, where longer authored routes
+will support the intended endurance test beyond the current 5 km authoring cap.
+It has not passed yet and no longer blocks M2 closure. Separate sensor dropout,
+cadence and simultaneous trainer/HR validation remain under M5/M6; trainer
+disconnect/reconnect evidence does not establish all sensor failure scenarios.
+
+The dated implementation history below is retained as evidence of progression;
+its earlier pending/deferred statements are superseded by this closure decision.
+
+## Implementation history
+
 Status: in progress. Normal-session Windows BLE probes verified SUITO service discovery, telemetry, control acquisition, and an acknowledged Start/Pause check. The full bounded pedaling grade profile completed, and the rider confirmed resistance increased and eased with the steps. No target-power commands have been sent. The user deferred the 30-minute ride and deliberate dropout tests on 2026-10-09. FIT/CSV exports are available, and the user confirmed successful FIT import and power display in their analysis application. External summary/pause checks and independent decoder validation remain pending.
 
 FTMS packet decoding and a transport-independent acknowledged-command state machine are implemented and tested. The BLE probe emits decoded measurements and can replay saved captures without hardware. The bounded Godot session UI has successful real SUITO captures for both the full profile and an early user-requested Pause. The persistent connection revision now also has a successful real SUITO Start/Pause/Resume/Finish capture. Longer-session and deliberate fault validation remain pending.

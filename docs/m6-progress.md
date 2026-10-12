@@ -197,5 +197,7 @@ values across shifts. No physical trainer commands were sent.
 - Complete the friend package with a sample route and setup guide, controller
   adapters and per-model physical testing as ordered in the M6 brief.
 - No friend trainer or independent Bluetooth sensor has been physically verified.
-  Neither M6 readiness nor compatibility acceptance is complete. M2/M5 endurance,
-  dropout, cadence, and simultaneous trainer/ANT-HR gates remain deferred/open.
+  Neither M6 readiness nor compatibility acceptance is complete. M2 is closed by
+  user acceptance of exports and trainer disconnect/reconnect. The 30-minute test
+  moves to M7; separate sensor dropout, cadence and simultaneous trainer/ANT-HR
+  gates remain open under M5/M6.
