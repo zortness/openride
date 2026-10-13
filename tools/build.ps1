@@ -1,4 +1,4 @@
-param([switch]$Release, [switch]$Offline, [string]$Godot = 'godot')
+param([switch]$Release, [switch]$Offline, [string]$Godot = $(if ($env:OPENRIDE_GODOT) { $env:OPENRIDE_GODOT } else { 'godot' }))
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $projectRoot

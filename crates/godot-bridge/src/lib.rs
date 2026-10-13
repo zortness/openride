@@ -3,6 +3,8 @@ use godot::classes::RefCounted;
 use godot::prelude::*;
 use ride_core::{extract_route, read_route, route_gpx, save_new, Library};
 mod activity_export;
+mod source_review;
+mod full_route;
 mod trainer;
 
 struct OpenRideExtension;

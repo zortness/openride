@@ -84,6 +84,9 @@ static func validate(path:String) -> Dictionary:
 		return {"error":"Unsupported streaming settings"}
 	if not m.get("presentation") is Dictionary or not m.presentation.get("terrain_corridor",false):return {"error":"Riding surface missing"}
 	var payloads:Array=[m.route];var seen:={}
+	if m.has("terrain_provenance"):
+		if not m.terrain_provenance is Dictionary or m.terrain_provenance.get("path")!="terrain-provenance.json":return {"error":"Invalid terrain provenance path"}
+		payloads.append(m.terrain_provenance)
 	if m.has("coast"):
 		if not m.coast is Dictionary or m.coast.get("path")!="coast.json":return {"error":"Invalid coast path"}
 		payloads.append(m.coast)

@@ -2,11 +2,51 @@ use std::path::Path;
 
 fn run() -> Result<(), String> {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if args.len() == 3 && args[0] == "--review-repairs" {
+        let review = ride_core::source_review::open(Path::new(&args[1]))?;
+        let repairs = ride_core::route_repairs::comparisons(&review)?;
+        ride_core::save_new(&args[2], &serde_json::to_string_pretty(&serde_json::json!({
+            "review_revision":review.revision,"repairs":repairs
+        })).map_err(|e|e.to_string())?)?;
+        println!("Exported {} repair comparisons; saved review unchanged", repairs.len());
+        return Ok(());
+    }
+    if args.len() == 3 && args[0] == "--review-profile" {
+        let review = ride_core::source_review::open(Path::new(&args[1]))?;
+        let profile = ride_core::full_route::Profile::from_review(&review)?;
+        let points:Vec<_>=profile.points.iter().map(|p|serde_json::json!({"source_sample":p.sample,"distance_m":p.distance,"latitude":p.lat,"longitude":p.lon,"elevation_m":p.height,"break_before":p.break_before})).collect();
+        let output = serde_json::json!({"kind":"openride.reviewed-profile","schema_version":1,"trainer_ready":false,"review_revision":review.revision,"sources":review.document.sources,"geometry_source":review.document.geometry_source,"elevation_source":review.document.elevation_source,"name":review.activities[0].name,"points":points,"issues":profile.issues,"bridged_pauses":profile.bridged_pauses,"unresolved_breaks":profile.unresolved_breaks});
+        ride_core::save_new(
+            &args[2],
+            &serde_json::to_string(&output).map_err(|e| e.to_string())?,
+        )?;
+        println!(
+            "Reviewed profile: {:.3} km; {} retained breaks",
+            profile.length_m() / 1000.,
+            profile.unresolved_breaks
+        );
+        return Ok(());
+    }
     if args.len() == 3 && args[0] == "--import-route" {
-        let activity=ride_core::import_file(Path::new(&args[1]))?;
-        let route=ride_core::extract_route(&activity,0,activity.samples.len().checked_sub(1).ok_or("Empty activity")?)?;
-        ride_core::save_new(&args[2],&serde_json::to_string_pretty(&route).map_err(|e|e.to_string())?)?;
-        println!("Imported {} route points from {}",route.points.len(),activity.format);
+        let activity = ride_core::import_file(Path::new(&args[1]))?;
+        let route = ride_core::extract_route(
+            &activity,
+            0,
+            activity
+                .samples
+                .len()
+                .checked_sub(1)
+                .ok_or("Empty activity")?,
+        )?;
+        ride_core::save_new(
+            &args[2],
+            &serde_json::to_string_pretty(&route).map_err(|e| e.to_string())?,
+        )?;
+        println!(
+            "Imported {} route points from {}",
+            route.points.len(),
+            activity.format
+        );
         return Ok(());
     }
     if args.len() == 3 && args[0] == "--activity-evidence" {

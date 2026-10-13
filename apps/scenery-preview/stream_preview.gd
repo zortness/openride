@@ -313,6 +313,10 @@ func load_package() -> bool:
 	package_sha256=FileAccess.get_sha256(root_path.path_join("manifest.json"))
 	var route:Variant=checked_json(m.route)
 	if route==null:return false
+	if m.has("terrain_provenance"):
+		if not m.terrain_provenance is Dictionary or m.terrain_provenance.get("path")!="terrain-provenance.json":fail("Invalid terrain provenance path");return false
+		var provenance:Variant=checked_json(m.terrain_provenance)
+		if not provenance is Dictionary or provenance.get("kind")!="openride.terrain-provenance" or provenance.get("schema_version")!=1:fail("Invalid terrain provenance");return false
 	var error:String=traversal.configure(route)
 	if not error.is_empty():fail(error);return false
 	lookahead.configure(route)

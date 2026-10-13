@@ -32,10 +32,15 @@ var activity_export: Control
 var route_workflow: Control
 var shell: Control
 var source_screen: Control
+var full_ride_review: Control
 
 func _ready() -> void:
 	_build_ui()
 	shell = preload("res://app_shell.gd").new(); add_child(shell); shell.add_to_group("app_shell"); shell.configure(self,source_screen)
+	if OS.get_cmdline_user_args().has("--verify-full-preview"):
+		verification = preload("res://full_route_verification.gd").new(); verification.run.call_deferred(self); return
+	if OS.get_cmdline_user_args().has("--verify-source-review"):
+		verification = preload("res://source_review_verification.gd").new(); verification.run.call_deferred(self); return
 	if OS.get_cmdline_user_args().has("--verify-ux"):
 		verification = preload("res://ux_verification.gd").new(); verification.run.call_deferred(self); return
 	if OS.get_cmdline_user_args().has("--verify-discovery"):

@@ -24,6 +24,9 @@ code is MIT; external map data and dependencies have separate licenses.
   it generates runtime sources and copies native components.
 - Discover Python/Godot on PATH or accept explicit executable overrides. Do not
   hardcode a contributor's home directory or choose Thonny's bundled Python.
+- Use `. ./build/Use-Environment.ps1` for session tool paths, or
+  `./build/run.ps1 python ...` for a single command. Machine overrides belong in
+  ignored `build/environment.local.psd1`; the example and setup scripts are tracked.
 - Automated Godot checks must use an isolated APPDATA under local/godot-appdata;
   never alter the user's real sessions/preferences. Set this per process/session.
 - Use hidden, redirected, bounded processes for automated Windows GUI tests.

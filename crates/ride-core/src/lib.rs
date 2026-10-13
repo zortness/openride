@@ -1,4 +1,7 @@
 //! Engine-independent activity import and route inspection. No engine or network access.
+pub mod source_review;
+pub mod full_route;
+pub mod route_repairs;
 use chrono::DateTime;
 use quick_xml::{events::Event, Reader};
 use serde::{Deserialize, Serialize};

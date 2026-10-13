@@ -92,6 +92,8 @@ func configure(owner_app: Control, inspector: Control) -> void:
 	label(settings,"Live ride: Q/E or shoulders shift easier/harder; P or north button pauses/resumes.\nEsc or Start opens the ride menu. Nine load steps; gear 5 is neutral.\nJ/K/L or D-pad left/up/right reserve direction choices; junction navigation is not available.",18)
 	label(settings,"Controller: D-pad moves focus; south button confirms; east button returns.\nShoulders change inner tabs when available, otherwise main sections.\nEditor: left stick orbits, right stick pans, triggers zoom. Elsewhere left stick moves focus.\nFile dialogs: shoulders cycle fields and Open / Cancel. Text entry uses the keyboard.",18)
 	button(app.route_workflow.tabs.get_child(0),"Inspect source samples / export a section",func(): navigate(inspector))
+	app.full_ride_review=preload("res://full_ride_review.gd").new(); register(app.full_ride_review,"Full ride review")
+	button(app.route_workflow.tabs.get_child(0),"Full ride review / compare TCX and GPX",func(): navigate(app.full_ride_review))
 	history.refresh()
 	build_ride_menu()
 	get_tree().auto_accept_quit = false
@@ -209,7 +211,8 @@ func show_ride_menu() -> void:
 func request_quit() -> void:
 	if is_instance_valid(active_world) and active_world.active_ride(): quitting = true; show_ride_menu(); return
 	var confirm := ConfirmationDialog.new(); confirm.dialog_text = "Exit OpenRide? Save any route edits before exiting."; add_child(confirm)
-	if app.route_workflow.has_unsaved_edits(): confirm.dialog_text="Exit and discard unsaved route edits? Return to the editor and Save route edits to keep them."
+	if app.full_ride_review.dirty or app.full_ride_review.busy: confirm.dialog_text="A full ride review has unsaved decisions or work in progress. Exit anyway? Return to Full ride review to save or wait."
+	elif app.route_workflow.has_unsaved_edits(): confirm.dialog_text="Exit and discard unsaved route edits? Return to the editor and Save route edits to keep them."
 	elif app.route_workflow.pid>0: confirm.dialog_text="A route preparation job is running. Exit the app? The separate job will continue; reopen the project to check its result."
 	confirm.confirmed.connect(func(): get_tree().quit()); confirm.canceled.connect(confirm.queue_free); confirm.popup_centered()
 

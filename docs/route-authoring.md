@@ -1,5 +1,35 @@
 # Route authoring in the desktop editor
 
+For complete recordings, open **Create → Full ride review / compare TCX and GPX**.
+Choose **New review from TCX / GPX**, select one recording's variants together,
+and choose a parent folder under `local/` or another private location. The app
+creates a new review folder with preserved source snapshots and `review.json`.
+Inspect the full track/profile, compare sources, select geometry/elevation roles,
+and classify individual gaps. **Save decisions** persists those choices;
+**Open saved review** reopens `review.json` even if the original files have moved.
+Unselected roles and unreviewed gaps remain explicit. Saving a classification
+preserves the original source geometry. To inspect beyond 5 km, select the same
+recording for **Geometry** and **Elevation**, save, then choose **Open full-route
+sparse preview (no 5 km limit)**. Use the distance slider, clickable elevation
+overview or ±10 km buttons to seek, and Play to traverse at 30 km/h. Rotate and
+zoom change the local road view. Playback stops before unresolved breaks.
+
+The preview derives short connectors from saved **Recording pause** decisions:
+up to 5 m horizontally, at most 1 m elevation change, and no more than 100% raw
+connector grade. Co-located samples require matching heights within 1 cm. Missing
+positions/heights, other classifications and unsafe connectors stay flagged.
+These are conservative preview rules, not automatic elevation correction.
+Cross-source elevation alignment is not implemented; choosing different sources
+produces an explicit error. Reopening regenerates the preview from the saved,
+hash-validated review. The sparse preview is not an installable riding package;
+the existing scenery workflow below still has its 5 km limit.
+See [M7 progress](m7-progress.md) for validation and remaining work.
+
+An initial [tiled section builder](m7-tiled-sections.md) can now package continuous
+reviewed sections up to 12 km through developer tooling. The prepared OC first
+8 km is available under `local/oc_to_solana/content` for **Ride → Preview selected
+route**. Full-recording preparation and integration into Create remain ahead.
+
 Open **Create** from the main navigation. A project is a local directory containing
 `project.json`, downloaded sources, review documents, build outputs and a job log.
 Use **Open project** to resume it. Projects and riding packages are separate:

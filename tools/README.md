@@ -1,5 +1,8 @@
 # Tool inventory
 
+Use [build/Use-Environment.ps1](../build/README.md) for local executable overrides.
+The example configuration is tracked; `build/environment.local.psd1` is ignored.
+
 These scripts are source tooling, not captured test output. Generated files belong
 in ignored local/, export/, dist/ or target/ directories.
 
@@ -11,6 +14,8 @@ in ignored local/, export/, dist/ or target/ directories.
 | Hardware diagnostics | probe-devices.ps1, probe-ant.ps1 | Yes; outputs and keys stay local |
 | Developer previews and benchmarks | preview-*.ps1, benchmark-rider.ps1 | Yes; some defaults refer to unavailable private RPV outputs; supply your own paths |
 | Historical reproducible experiments | acquire-osm2world.py, compare-osm2world.py, update-rpv-detail.ps1 | Yes; reference tooling, not prerequisites for an ordinary ride |
+| M7 tiled section proof | tiled-scenery.py; fixtures/tiled-terrain.py | Yes; [usage and limits](../docs/m7-tiled-sections.md); private sources/packages stay under local/ |
+| M7 resumable corridor jobs | corridor-scenery.py | Yes; [usage and remaining gates](../docs/m7-corridor-preparation.md); regional preparation, not yet a unified full-route package |
 | Bytecode/caches, captures, map downloads, built executables | __pycache__, local/, export/, dist/, target/ | No |
 
 ## Local verification

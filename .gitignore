@@ -15,6 +15,7 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+/build/environment.local.psd1
 
 # Local credentials and editor/export secrets
 .env

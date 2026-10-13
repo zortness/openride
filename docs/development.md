@@ -1,5 +1,10 @@
 # Development and route inspection
 
+For machine-specific Python/Godot/PowerShell/Bash paths, use the tracked example
+and ignored local configuration in [build/](../build/README.md). Dot-source
+`./build/Use-Environment.ps1` before the commands below, or use `build/run.ps1`
+for a single command. This configures only the current process and its children.
+
 Audience: contributors building or validating M1. See [M1 progress](m1-progress.md) for current verification limits and [milestones](milestones.md) for the acceptance gate.
 
 For M2 hardware diagnostics, run `./tools/probe-devices.ps1` from normal PowerShell. See [M2 progress](m2-progress.md) for the read-only BLE probe's scope, capture files, and current hardware verification limits.

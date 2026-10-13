@@ -1,7 +1,10 @@
 # M7 — Full-route authoring and inspection
 
-Status: agreed 2026-10-11; implementation has not started. This brief follows the
-repository's existing milestone documentation layout. M6 remains open.
+Status: implementation started 2026-10-11. S01 full-ride intake/saved review and
+the initial S02 full-route sparse preview are available. A bounded S03 multi-tile
+builder has produced an OC 8 km terrain/road package; see [M7 progress](m7-progress.md).
+See the [M7 roadmap](m7-roadmap.md) for the approved seven-slice sequence and
+verification strategy. M6 remains open.
 
 ## Project Description
 
@@ -30,9 +33,11 @@ requires a real full-ride project and inspection in the Windows application.
 
 ## Final Integrated Acceptance
 
-Use a user-selected full ride longer than 5 km. Inspect its source quality, build
-its scenery, review tile boundaries and repairs, install its package, and traverse
-the full route offline. Reopen the project and package successfully. Demonstrate
+Use all three user-selected validation recordings: Death Ride, L'Étape du
+California and OC to Solana Beach. Inspect both TCX and GPX source variants before
+choosing geometry/elevation inputs. Build scenery for each complete supplied
+recording, review tile boundaries and repairs, install its package, and traverse
+the full route offline. Reopen each project and package successfully. Demonstrate
 resuming interrupted preparation without discarding completed valid work. Record
 build time, output size and runtime resource measurements on the test machine.
 The user confirms the result is useful for full-ride inspection.
@@ -73,6 +78,11 @@ and package intact when a rebuild fails. Validate cached inputs before reuse.
 - Terrain, imagery and map boundaries can introduce seams or duplicate geometry.
 - Whole-route metadata and editor overlays may grow despite runtime streaming.
 - Source quality, service coverage and download cost depend on the selected ride.
+- The first read-only intake found timestamp gaps in all three source pairs and
+  missing positions in the TCX variants. Geometry lengths differ between variants;
+  source choice and gap repair must be explicit, not automatic concatenation.
+- Existing steep-grade findings can block packaging. Review must distinguish real
+  steep roads from bad height samples without flattening valid climbs or descents.
 
 ## Existing Codebase / Prior Art
 
@@ -131,9 +141,16 @@ playback. Record equipment, duration, telemetry gaps, control responses and expo
 results. Performance checks include movement waits at chunk boundaries and
 whole-route metadata growth as well as frame times and CPU/GPU memory.
 
+Validation corpus selected 2026-10-11: Death Ride, L'Étape du California and OC to
+Solana Beach. All six existing TCX/GPX files passed the read-only importer in the
+initial intake; source hashes were unchanged. Detailed measurements, geographic
+data and diagnostics remain in ignored local analysis artifacts. This establishes
+importability, not continuous-route correctness or scenery readiness. Keep short
+RPV/Red Rock projects as regressions alongside the three long recordings.
+
 ## Acceptance Criteria
 
-- The selected complete ride imports without truncation at 5 km.
+- All three selected complete recordings import without truncation at 5 km.
 - Source timestamps, units, gaps and diagnostics are inspected before preparation.
 - Terrain detail follows an explicit resolution budget across the route.
 - Boundaries do not create artificial jumps in route distance, elevation or grade.
@@ -148,10 +165,12 @@ whole-route metadata growth as well as frame times and CPU/GPU memory.
 
 ## Open Questions
 
-- Which full ride is the first acceptance input, and how large is its extent?
+- Which TCX/GPX geometry and elevation sources, and which gap resolutions, should
+  be accepted for each of the three selected recordings after detailed review?
 - What terrain/imagery resolution and supported route extent should be targeted?
 - What tiling, overlap and coordinate strategy best fits the existing formats?
 - What build-time, memory and frame-time budgets apply on the reference machine?
 
-The first planning step is to inspect the chosen full recording and use its
-extent and diagnostics to set the initial implementation and validation budgets.
+Initial intake is complete and the implementation sequence is approved. Start
+with S01: saved full-ride source/gap review. Resolution/resource budgets remain
+explicit planning decisions for S02/S03. No physical trainer tests ran during intake.

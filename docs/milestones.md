@@ -1,6 +1,6 @@
 # Proposed milestone roadmap
 
-Status (2026-10-11): M1 is complete; M2 and M3 are closed by user acceptance; M4 is accepted for the tested Windows/Suito BLE/RPV setup. M5 remains in progress, M6 is active, and M7 is planned. The M2 30-minute endurance test and M3 performance follow-ups now belong to M7. See the linked milestone progress documents for evidence and scope limits.
+Status (2026-10-11): M1 is complete; M2 and M3 are closed by user acceptance; M4 is accepted for the tested Windows/Suito BLE/RPV setup. M5 remains in progress, M6 is active, and M7 is in progress. The M2 30-minute endurance test and M3 performance follow-ups now belong to M7. See the linked milestone progress documents for evidence and scope limits.
 
 Audience: the project owner and contributors selecting the next bounded piece of work. Read the [project plan](project-plan.md) for scope and architecture. Milestones are defined by observable outcomes; estimates should follow the first feasibility findings.
 
@@ -157,8 +157,13 @@ and M6 and should be tracked once, with results linked from both milestones.
 
 ## M7 — Full-route authoring and inspection
 
-Agreed 2026-10-11 as a separate milestone; implementation has not started.
-See the [M7 brief](m7-full-route-authoring.md). M6 remains open independently.
+Agreed 2026-10-11 as a separate milestone; the [seven-slice implementation roadmap](m7-roadmap.md)
+is approved and implementation is underway. Validation recordings: Death Ride, L'Étape du California and OC
+to Solana Beach; both TCX/GPX variants have passed initial read-only intake.
+See the [M7 brief](m7-full-route-authoring.md) and [M7 progress](m7-progress.md).
+S01 full-recording intake/saved review and an initial S02 sparse full-route preview
+are available. A bounded S03 multi-tile builder now packages an OC 8 km section.
+Full-route scenery preparation and acceptance remain open. M6 remains open independently.
 
 Outcome: import a complete personal ride beyond the current 5 km authoring cap,
 inspect and repair it as one 3D project, and build one offline streamed package.
@@ -168,7 +173,8 @@ and preparation that preserve continuous route distance and review decisions.
 
 Acceptance includes full-length offline traversal, inspection across scenery
 boundaries, resumable preparation, preserved original data and measured resource
-use. The first ride and supported size/resolution budgets remain to be selected.
+use. Source selection, gap decisions and supported size/resolution budgets remain
+to be agreed for the three validation recordings.
 
 Transferred on 2026-10-11: the continuous 30-minute supervised ride from M2 and
 performance measurement/improvements from M3, including frame pacing, chunk

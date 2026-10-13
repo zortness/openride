@@ -1,4 +1,4 @@
-param([string]$Godot = 'godot')
+param([string]$Godot = $(if ($env:OPENRIDE_GODOT) { $env:OPENRIDE_GODOT } else { 'godot' }))
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 Push-Location $root
