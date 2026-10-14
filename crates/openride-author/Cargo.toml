@@ -1,0 +1,21 @@
+[package]
+name = "openride-author"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+quick-xml = "0.38"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+ride-core = { path = "../ride-core" }
+content-builder = { path = "../content-builder" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+sha2 = "0.10.9"
+png = "0.18"
+zip = { version = "9.0.2", default-features = false, features = ["deflate"] }
+earcutr = "0.5.0"
+
+[dev-dependencies]
+tiff = { version = "0.11.3", default-features = false, features = ["deflate", "lzw"] }

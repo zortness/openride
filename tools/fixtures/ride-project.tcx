@@ -1,0 +1,7 @@
+<TrainingCenterDatabase><Activities><Activity Sport="Biking"><Id>2022-01-01T00:00:00Z</Id><Lap StartTime="2022-01-01T00:00:00Z"><DistanceMeters>9000</DistanceMeters><Track>
+<Trackpoint><Time>2022-01-01T00:00:00Z</Time><Position><LatitudeDegrees>33.00</LatitudeDegrees><LongitudeDegrees>-118</LongitudeDegrees></Position><AltitudeMeters>11</AltitudeMeters></Trackpoint>
+<Trackpoint><Time>2022-01-01T00:00:30Z</Time><Position><LatitudeDegrees>33.02</LatitudeDegrees><LongitudeDegrees>-118</LongitudeDegrees></Position><AltitudeMeters>31</AltitudeMeters></Trackpoint>
+<Trackpoint><Time>2022-01-01T00:01:00Z</Time><Position><LatitudeDegrees>33.04</LatitudeDegrees><LongitudeDegrees>-118</LongitudeDegrees></Position></Trackpoint>
+<Trackpoint><Time>2022-01-01T00:05:00Z</Time><Position><LatitudeDegrees>33.06</LatitudeDegrees><LongitudeDegrees>-118</LongitudeDegrees></Position><AltitudeMeters>41</AltitudeMeters></Trackpoint>
+<Trackpoint><Time>2022-01-01T00:05:30Z</Time><Position><LatitudeDegrees>33.08</LatitudeDegrees><LongitudeDegrees>-118</LongitudeDegrees></Position><AltitudeMeters>36</AltitudeMeters></Trackpoint>
+</Track></Lap></Activity></Activities></TrainingCenterDatabase>

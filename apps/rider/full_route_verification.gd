@@ -28,6 +28,9 @@ func run(app: Node) -> void:
 			if test_repairs and i==198: lat=33+199*0.0005-0.0001
 			if test_repairs and i==201: lat=33+199*0.0005+0.000107
 			var height := 10+sin(i*0.03)
+			if test_repairs and i in [98,99,100,101]:
+				lat=33+99*0.0005+{98:-0.0001,99:0.0,100:0.000002,101:0.0001}[i]
+				height={98:10.0,99:10.0,100:10.4,101:10.4}[i]
 			if test_repairs and i==199: height=10.0
 			if test_repairs and i==200: height=11.0
 			var timestamp := Time.get_datetime_string_from_unix_time(1640995200+i*5+(300 if i>=200 else 0))+"Z"
@@ -54,6 +57,11 @@ func run(app: Node) -> void:
 	if not check(preview.summary.length_m>20000,"No 5 km preview cap",app): return
 	if synthetic and not test_repairs and not check(preview.summary.bridged_pauses==1 and preview.summary.unresolved_breaks==0,"Short pause connected",app): return
 	if test_repairs:
+		if synthetic:
+			var automatic_count := 0
+			for repair in preview.summary.repairs:
+				if repair.proposal.kind=="automatic_grade_blend" and repair.status=="accepted": automatic_count+=1
+			if not check(automatic_count==1,"Import applies one automatic noise repair",app): return
 		var original_breaks: int=preview.summary.unresolved_breaks
 		var proposal_count: int=preview.summary.repairs.size()
 		if not check(proposal_count>0 and original_breaks>0,"Repair proposed without modifying route",app): return

@@ -60,9 +60,16 @@ func configure(owner_app: Control, inspector: Control) -> void:
 	hints = Label.new(); hints.text = "Arrow keys / Tab: move   Enter: select   Esc: back"; layout.add_child(hints)
 	register(inspector,"Inspect source")
 	register(app.content_library,"Ride"); pages.Ride = app.content_library
-	register(app.route_workflow,"Create"); pages.Create = app.route_workflow
+	register(app.route_workflow,"Legacy section builder")
+	app.ride_project = preload("res://ride_project.gd").new()
+	register(app.ride_project,"Ride Project"); pages.Create = app.ride_project
+	app.ride_project.legacy_requested.connect(func(): navigate(app.route_workflow))
+	app.ride_project.preview_requested.connect(app._open_scenery)
 	var preferences := ConfigFile.new(); preferences.load("user://authoring.cfg")
 	var last_project: String = str(preferences.get_value("authoring","last_project",""))
+	var last_ride_project: String = str(preferences.get_value("authoring","last_ride_project",""))
+	if FileAccess.file_exists(last_ride_project.path_join("project.json")):
+		app.ride_project.run_job("open", last_ride_project)
 	if FileAccess.file_exists(last_project.path_join("project.json")):
 		app.route_workflow.project_path = last_project; app.route_workflow.reload_project()
 	register(app.activity_export,"Export activity")

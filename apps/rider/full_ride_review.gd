@@ -136,7 +136,11 @@ func _process(_delta: float) -> void:
 	if not response.ok: status.text=str(response.message); refresh_enabled(); return
 	last_operation_ok=true
 	review=response.review; directory=pending_directory; dirty=false
-	populate(); status.text="Saved review. Source breaks remain intact; no scenery or joined route has been generated."
+	populate()
+	var automatic_count := 0
+	for repair in review.document.get("repairs",{}).values():
+		if repair.proposal.kind=="automatic_grade_blend" and repair.status=="accepted": automatic_count+=1
+	status.text="Saved review. %d automatic elevation repairs applied. Inspect or undo them in Full-route preview. Original files remain unchanged." % automatic_count
 
 func populate() -> void:
 	updating=true; view_source.clear(); geometry.clear(); elevation.clear(); comparison.text=""

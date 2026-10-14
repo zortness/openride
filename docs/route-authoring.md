@@ -216,3 +216,8 @@ separate terrain/OSM retries, stage failure persistence, terrain-height stationi
 and installation review/versioning. KML import is tested in Rust and through the
 native builder. `--verify-authoring --authoring-project=...` exercises the exported
 app's background build and embedded review viewer against the saved RPV project.
+## Automatic import repairs
+
+The full-recording review now applies conservative, reversible elevation-noise
+blends when source choices are saved. See [automatic route repairs](automatic-route-repairs.md)
+for limits, before/after inspection, undo, and command-line use.

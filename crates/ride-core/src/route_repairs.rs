@@ -181,7 +181,113 @@ pub fn proposals(review: &Review) -> Result<Vec<Proposal>> {
             break;
         }
     }
+    // Preserve legacy proposal identities and avoid continuity repair overlap.
+    proposals.extend(grade_blends(&profile, hash, &edited_samples));
     Ok(proposals)
+}
+
+fn grade_blends(profile: &Profile, hash: &str, occupied: &BTreeSet<usize>) -> Vec<Proposal> {
+    let points = &profile.points;
+    let flags: Vec<usize> = points
+        .windows(2)
+        .enumerate()
+        .filter_map(|(i, pair)| {
+            let step = pair[1].distance - pair[0].distance;
+            let rise = (pair[1].height - pair[0].height).abs();
+            (!pair[1].break_before && step >= 0.01 && step <= 1. && rise > step && rise <= 2.)
+                .then_some(i + 1)
+        })
+        .collect();
+    let mut result = vec![];
+    let mut cursor = 0;
+    let mut used = occupied.clone();
+    while cursor < flags.len() && result.len() < 128 {
+        let first = flags[cursor];
+        let mut last = first;
+        cursor += 1;
+        while cursor < flags.len()
+            && points[flags[cursor]].distance - points[last].distance <= 20.
+            && !points[last + 1..=flags[cursor]]
+                .iter()
+                .any(|p| p.break_before)
+        {
+            last = flags[cursor];
+            cursor += 1;
+        }
+        let mut left = first - 1;
+        let mut right = last;
+        while left > 0 && points[first - 1].distance - points[left].distance < 5. {
+            left -= 1;
+        }
+        while right + 1 < points.len() && points[right].distance - points[last].distance < 5. {
+            right += 1;
+        }
+        let length = points[right].distance - points[left].distance;
+        if points[first - 1].distance - points[left].distance < 5.
+            || points[right].distance - points[last].distance < 5.
+            || length > 100.
+            || length <= 0.
+            || points[right].sample - points[left].sample > 32
+            || points[left + 1..=right].iter().any(|p| p.break_before)
+            || points[left..=right]
+                .windows(2)
+                .any(|p| p[1].sample != p[0].sample + 1)
+            || (points[right].height - points[left].height).abs() / length > 0.15
+            || points[left..=right]
+                .iter()
+                .any(|p| used.contains(&p.sample))
+        {
+            continue;
+        }
+        let mut elevations = BTreeMap::new();
+        let mut valid = true;
+        for p in &points[left + 1..right] {
+            let height = points[left].height
+                + (points[right].height - points[left].height)
+                    * (p.distance - points[left].distance)
+                    / length;
+            if (height - p.height).abs() > 2. {
+                valid = false;
+                break;
+            }
+            elevations.insert(p.sample, height);
+        }
+        if !valid {
+            continue;
+        }
+        used.extend(points[left..=right].iter().map(|p| p.sample));
+        result.push(Proposal {
+            id: format!("{hash}:{}:grade-v1", points[first].sample),
+            source_sha256: hash.into(),
+            sample: points[first].sample,
+            kind: "automatic_grade_blend".into(),
+            elevations,
+            connector: None,
+        });
+    }
+    result
+}
+
+/// Only explicit saves apply repairs. Rejection and undo take precedence.
+pub fn apply_automatic(review: &mut Review) -> Result<()> {
+    if review.document.geometry_source.is_none()
+        || review.document.geometry_source != review.document.elevation_source
+    {
+        return Ok(());
+    }
+    for proposal in proposals(review)? {
+        if proposal.kind == "automatic_grade_blend" {
+            review
+                .document
+                .repairs
+                .entry(proposal.id.clone())
+                .or_insert(Repair {
+                    proposal,
+                    status: "accepted".into(),
+                });
+        }
+    }
+    Ok(())
 }
 
 pub fn validate(review: &Review) -> Result<()> {
@@ -203,8 +309,14 @@ pub fn validate(review: &Review) -> Result<()> {
         if id != &repair.proposal.id
             || *id
                 != format!(
-                    "{}:{}:local-v1",
-                    repair.proposal.source_sha256, repair.proposal.sample
+                    "{}:{}:{}",
+                    repair.proposal.source_sha256,
+                    repair.proposal.sample,
+                    if repair.proposal.kind == "automatic_grade_blend" {
+                        "grade-v1"
+                    } else {
+                        "local-v1"
+                    }
                 )
             || !matches!(repair.status.as_str(), "proposed" | "accepted" | "rejected")
         {

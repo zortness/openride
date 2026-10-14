@@ -2,10 +2,13 @@
 import argparse
 import datetime
 import hashlib
+import http.client
 import json
 import math
 from pathlib import Path
 import sys
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -26,11 +29,21 @@ def download(url, fields=None):
     print('Download: '+url.split('?')[0],flush=True)
     body = urllib.parse.urlencode(fields).encode() if fields is not None else None
     request = urllib.request.Request(url, data=body, headers={"User-Agent": "OpenRide-authoring/0.1"})
-    with urllib.request.urlopen(request, timeout=60) as response:
-        raw = response.read(LIMIT + 1)
-    if len(raw) > LIMIT:
-        raise ValueError("Response exceeds 64 MiB")
-    return raw
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                raw = response.read(LIMIT + 1)
+            if len(raw) > LIMIT:
+                raise ValueError("Response exceeds 64 MiB")
+            return raw
+        except (TimeoutError, urllib.error.URLError, http.client.IncompleteRead) as error:
+            if isinstance(error, urllib.error.HTTPError):
+                error.close()
+                if error.code not in (408,429,500,502,503,504): raise
+            if attempt == 2: raise
+            delay = 2 ** (attempt + 1)
+            print(f'Temporary download failure: {error}; retrying same request in {delay}s',flush=True)
+            time.sleep(delay)
 
 
 def plan(preparation):

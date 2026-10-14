@@ -12,7 +12,7 @@ float noise(vec2 p) {vec2 i=floor(p);vec2 f=fract(p);f=f*f*(3.0-2.0*f);return mi
 void vertex(){world=(MODEL_MATRIX*vec4(VERTEX,1.0)).xyz;tint=COLOR.rgb;}
 void fragment(){
  vec3 color=base_color*tint;
- if(use_imagery){vec2 uv=(world.xz-imagery_bounds.xy)/imagery_bounds.zw;color=mix(color,texture(imagery,uv).rgb,0.62);}
+ if(use_imagery){vec2 uv=(world.xz-imagery_bounds.xy)/imagery_bounds.zw;vec4 photo=texture(imagery,uv);color=mix(color,photo.rgb,0.85*photo.a);}
  float grain=noise(world.xz*(road?22.0:3.0));
  float broad=noise(world.xz*0.18);
  ALBEDO=color*(0.94+grain*0.07+broad*0.05);

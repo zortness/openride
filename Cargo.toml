@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/ride-core", "crates/godot-bridge", "crates/trainer-core", "crates/device-probe", "crates/activity-core", "crates/content-builder"]
+members = ["crates/ride-core", "crates/godot-bridge", "crates/trainer-core", "crates/device-probe", "crates/activity-core", "crates/content-builder", "crates/openride-author"]
 resolver = "2"
 
 [workspace.package]

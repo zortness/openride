@@ -227,7 +227,16 @@ pub fn open(directory: &Path) -> Result<Review> {
     let mut activities = vec![];
     let mut total = 0;
     for (i, s) in document.sources.iter().enumerate() {
-        if ![format!("source-{i}.gpx"), format!("source-{i}.tcx")].contains(&s.file) {
+        let project_path = s.sha256.len() == 64
+            && s.sha256.bytes().all(|c| c.is_ascii_hexdigit())
+            && [
+                format!("sources/{}.gpx", s.sha256),
+                format!("sources/{}.tcx", s.sha256),
+            ]
+            .contains(&s.file);
+        if !project_path
+            && ![format!("source-{i}.gpx"), format!("source-{i}.tcx")].contains(&s.file)
+        {
             return Err("Invalid source snapshot path".into());
         }
         let raw = read(&directory.join(&s.file), SOURCE_LIMIT)?;
@@ -301,12 +310,16 @@ pub fn save(directory: &Path, revision: &str, document: Document) -> Result<Revi
         );
     }
     validate(&document, &current.gaps)?;
-    crate::route_repairs::validate(&Review {
-        document: document.clone(),
+    let mut checked = Review {
+        document,
         revision: current.revision.clone(),
         activities: current.activities.clone(),
         gaps: gaps(&current.activities),
-    })?;
+    };
+    crate::route_repairs::validate(&checked)?;
+    crate::route_repairs::apply_automatic(&mut checked)?;
+    crate::route_repairs::validate(&checked)?;
+    let document = checked.document;
     let raw = serde_json::to_vec_pretty(&document).map_err(|e| e.to_string())?;
     if raw.len() as u64 > DOCUMENT_LIMIT {
         return Err("Review decisions exceed 1 MiB".into());

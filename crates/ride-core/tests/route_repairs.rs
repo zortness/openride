@@ -8,6 +8,125 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+fn grade_fixture(
+    heights: &[f64],
+    break_at: Option<usize>,
+) -> (std::path::PathBuf, source_review::Review) {
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let root = std::env::temp_dir().join(format!(
+        "grade-repair-{}-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos(),
+        COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    fs::create_dir(&root).unwrap();
+    let mut xml = String::from("<gpx><trk><trkseg>");
+    for (i, (metres, height)) in [0., 10., 10.2, 12., 12.2, 20., 30.]
+        .iter()
+        .zip(heights)
+        .enumerate()
+    {
+        if break_at == Some(i) {
+            xml.push_str("</trkseg><trkseg>");
+        }
+        xml.push_str(&format!(
+            "<trkpt lat=\"{}\" lon=\"-118\"><ele>{height}</ele></trkpt>",
+            33. + metres / 111195.
+        ));
+    }
+    xml.push_str("</trkseg></trk></gpx>");
+    let path = root.join("synthetic.gpx");
+    fs::write(&path, xml).unwrap();
+    let initial = source_review::create(&root.join("review"), &[path]).unwrap();
+    let mut doc = initial.document.clone();
+    doc.geometry_source = Some(doc.sources[0].sha256.clone());
+    doc.elevation_source = doc.geometry_source.clone();
+    let saved = source_review::save(&root.join("review"), &initial.revision, doc).unwrap();
+    (root, saved)
+}
+
+#[test]
+fn import_repairs_grade_noise_and_honors_undo_and_rejection() {
+    let (root, mut review) = grade_fixture(&[10., 10., 10.4, 10.4, 10., 10.5, 11.], None);
+    let directory = root.join("review");
+    assert_eq!(
+        review.document.repairs.len(),
+        1,
+        "nearby spikes form one blend"
+    );
+    let repair = review.document.repairs.values().next().unwrap();
+    assert_eq!(repair.status, "accepted");
+    assert_eq!(repair.proposal.kind, "automatic_grade_blend");
+    let id = repair.proposal.id.clone();
+    let fixed = Profile::from_review(&review).unwrap();
+    assert!(fixed
+        .points
+        .windows(2)
+        .all(|p| (p[1].height - p[0].height).abs() <= (p[1].distance - p[0].distance) * 0.15));
+    assert_eq!(
+        fs::read(root.join("synthetic.gpx")).unwrap(),
+        fs::read(directory.join("source-0.gpx")).unwrap()
+    );
+    review = source_review::open(&directory).unwrap();
+    for status in ["proposed", "rejected"] {
+        review = route_repairs::decide(&directory, &review.revision, &id, status).unwrap();
+        review =
+            source_review::save(&directory, &review.revision, review.document.clone()).unwrap();
+        assert_eq!(
+            review.document.repairs[&id].status, status,
+            "save must not reapply undone/rejected repairs"
+        );
+        let raw = Profile::from_review(&review).unwrap();
+        assert_eq!(fixed.length_m(), raw.length_m());
+        assert!(raw
+            .points
+            .windows(2)
+            .any(|p| (p[1].height - p[0].height).abs() > p[1].distance - p[0].distance));
+        for (a, b) in fixed.points.iter().zip(&raw.points) {
+            assert_eq!(
+                (a.sample, a.distance, a.lat, a.lon, a.break_before),
+                (b.sample, b.distance, b.lat, b.lon, b.break_before)
+            );
+        }
+    }
+    review = route_repairs::decide(&directory, &review.revision, &id, "accepted").unwrap();
+    let mut forged = review.document.clone();
+    *forged
+        .repairs
+        .get_mut(&id)
+        .unwrap()
+        .proposal
+        .elevations
+        .values_mut()
+        .next()
+        .unwrap() += 0.1;
+    assert!(source_review::save(&directory, &review.revision, forged).is_err());
+    assert!(
+        route_repairs::comparisons(&review).unwrap()[0]
+            .elevation_changes
+            .len()
+            > 1
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn automatic_repairs_leave_real_climbs_large_errors_and_gaps_for_review() {
+    for (heights, gap) in [
+        ([10., 12., 12.04, 12.4, 12.44, 14., 16.], None), // continuous 20% climb
+        ([10., 10., 14., 14., 14., 10., 10.], None),      // exceeds the 2 m correction budget
+        ([10., 10., 10.4, 10.4, 10., 10.5, 11.], Some(3)), // unresolved boundary inside window
+        ([10., 12., 12.4, 12.4, 12., 14., 16.], None),    // spike on a >15% anchor grade
+    ] {
+        let (root, review) = grade_fixture(&heights, gap);
+        assert!(review.document.repairs.is_empty());
+        fs::remove_dir_all(root).unwrap();
+    }
+}
+
 #[test]
 fn repairs_are_explicit_persisted_reversible_and_source_bound() {
     let root = std::env::temp_dir().join(format!(

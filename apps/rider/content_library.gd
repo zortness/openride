@@ -8,6 +8,9 @@ var listing: ItemList
 var location: Label
 var picker: FileDialog
 var ride_button: Button
+var package_worker: Thread
+var package_action := ""
+var package_preview := true
 
 func get_ok_button() -> Button:
 	return ride_button
@@ -29,6 +32,8 @@ func _ready() -> void:
 		button.pressed.connect(func():
 			if caption=="Choose folder":picker.popup_centered_ratio(0.7)
 			else:refresh())
+	var open_zip := Button.new(); open_zip.text = "Open ZIP…"; open_zip.custom_minimum_size.y = 40; row.add_child(open_zip); open_zip.pressed.connect(choose_zip)
+	var export_zip := Button.new(); export_zip.text = "Export selected ZIP…"; export_zip.custom_minimum_size.y = 40; row.add_child(export_zip); export_zip.pressed.connect(choose_export)
 	listing=ItemList.new();listing.custom_minimum_size=Vector2(650,300); listing.size_flags_vertical=Control.SIZE_EXPAND_FILL; box.add_child(listing)
 	listing.item_selected.connect(func(index:int):get_ok_button().disabled=entries[index].has("error"))
 	listing.item_activated.connect(func(index:int):
@@ -45,26 +50,88 @@ func _ready() -> void:
 func open_selected(preview:bool=false) -> void:
 	var selected:=listing.get_selected_items()
 	if selected.is_empty():return
+	if str(entries[selected[0]].path).to_lower().ends_with(".zip"):
+		install_zip(entries[selected[0]].path, preview); return
 	var entry:Dictionary=validate(entries[selected[0]].path)
 	if entry.has("error"):
 		refresh();popup_centered();return
 	if preview:package_selected.emit(entry.path)
 	else:ride_selected.emit(entry.path)
 
+func choose_zip() -> void:
+	var dialog := FileDialog.new(); dialog.access = FileDialog.ACCESS_FILESYSTEM; dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	dialog.filters = PackedStringArray(["*.zip ; Ride ZIP packages"]); add_child(dialog)
+	dialog.file_selected.connect(func(path: String): install_zip(path, true); dialog.queue_free())
+	dialog.canceled.connect(dialog.queue_free); dialog.popup_centered_ratio(0.75)
+
+func choose_export() -> void:
+	var selected := listing.get_selected_items()
+	if selected.is_empty(): return
+	var path: String = entries[selected[0]].path
+	if path.to_lower().ends_with(".zip"): location.text = "This ride is already a ZIP. Share the selected file:\n" + path; return
+	var dialog := FileDialog.new(); dialog.access = FileDialog.ACCESS_FILESYSTEM; dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+	dialog.filters = PackedStringArray(["*.zip ; Ride ZIP packages"]); dialog.current_file = "ride.zip"; add_child(dialog)
+	dialog.file_selected.connect(func(destination: String): run_package("pack", path, destination, false); dialog.queue_free())
+	dialog.canceled.connect(dialog.queue_free); dialog.popup_centered_ratio(0.75)
+
+func install_zip(path: String, preview := true) -> void:
+	run_package("install", path, ProjectSettings.globalize_path("user://package-cache"), preview)
+
+func run_package(action: String, source: String, destination: String, preview: bool) -> void:
+	if package_worker != null: return
+	var executable := ProjectSettings.globalize_path("res://bin/openride-author.exe") if OS.has_feature("editor") else OS.get_executable_path().get_base_dir().path_join("authoring/openride-author.exe")
+	package_action = action; package_preview = preview
+	package_worker = Thread.new(); location.text = "Validating and %s ZIP package…" % ("exporting" if action == "pack" else "opening")
+	var error := package_worker.start(func():
+		var output: Array = []; var code := OS.execute(executable, PackedStringArray(["package", action, source, destination]), output, true, false)
+		return {"code": code, "output": "\n".join(output)})
+	if error != OK: package_worker = null; location.text = "Could not start native ZIP tool."
+
+func _process(_delta: float) -> void:
+	if package_worker == null or package_worker.is_alive(): return
+	var result: Dictionary = package_worker.wait_to_finish(); package_worker = null
+	var terminal: Dictionary = {}
+	for line in str(result.output).split("\n"):
+		if line.strip_edges().is_empty(): continue
+		var parser := JSON.new()
+		if parser.parse(line) != OK: terminal = {}; break
+		var value = parser.data
+		if value is Dictionary and value.get("protocol_version") == 1 and value.get("event") == "result": terminal = value
+	if result.code != 0 or terminal.get("status") != "complete":
+		location.text = str(terminal.get("error", {}).get("message", "Native ZIP operation failed.")); return
+	var package: Dictionary = terminal.package
+	if package_action == "pack": location.text = "ZIP exported:\n" + str(package.path); return
+	var entry := validate(package.path)
+	if entry.has("error"): location.text = entry.error; return
+	location.text = "ZIP opened from the managed offline cache."
+	if package_preview: package_selected.emit(entry.path)
+	else: ride_selected.emit(entry.path)
+
+func _exit_tree() -> void:
+	if package_worker != null and package_worker.is_started(): package_worker.wait_to_finish()
+
 func refresh() -> void:
 	var selected_path := ""
 	var selected := listing.get_selected_items()
 	if not selected.is_empty() and selected[0]<entries.size(): selected_path = entries[selected[0]].path
 	entries.clear();listing.clear();get_ok_button().disabled=true
-	location.text="Drop route package folders into:\n"+directory
+	location.text="Drop route folders or ZIP packages into:\n"+directory
 	if not DirAccess.dir_exists_absolute(directory):
 		location.text+="\nFolder not found. Create it or choose an existing folder.";refreshed.emit();return
 	var folders:=DirAccess.get_directories_at(directory);folders.sort()
+	if FileAccess.file_exists(directory.path_join("manifest.json")):
+		var entry := validate(directory); entry["path"] = directory; entries.append(entry)
+		listing.add_item(entry.error if entry.has("error") else entry.name); listing.set_item_disabled(listing.item_count-1,entry.has("error"))
 	for folder in folders:
+		if folder==".openride-assembly":continue
 		var path:=directory.path_join(folder)
 		var entry:=validate(path);entry["path"]=path;entries.append(entry)
 		listing.add_item(folder+" - "+entry.error if entry.has("error") else entry.name)
 		listing.set_item_disabled(listing.item_count-1,entry.has("error"))
+	var archives := DirAccess.get_files_at(directory); archives.sort()
+	for archive in archives:
+		if not archive.to_lower().ends_with(".zip"): continue
+		entries.append({"name": archive, "path": directory.path_join(archive), "packed": true}); listing.add_item(archive + " · ZIP")
 	if entries.is_empty():location.text+="\nNo packages found."
 	var preferred := -1
 	for i in range(entries.size()):

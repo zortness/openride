@@ -1,0 +1,10 @@
+<gpx version="1.1"><trk><name>Synthetic gap and tiny loop</name><trkseg>
+<trkpt lat="33" lon="-118"><ele>10</ele><time>2022-01-01T00:00:00Z</time></trkpt>
+<trkpt lat="33.06" lon="-118"><ele>10</ele><time>2022-01-01T00:00:30Z</time></trkpt>
+<trkpt lat="33.06" lon="-117.9999678"><ele>10</ele><time>2022-01-01T00:00:32Z</time></trkpt>
+<trkpt lat="33.060027" lon="-117.9999678"><ele>10</ele><time>2022-01-01T00:00:34Z</time></trkpt>
+<trkpt lat="33.060027" lon="-118"><ele>10</ele><time>2022-01-01T00:00:36Z</time></trkpt>
+<trkpt lat="33.06" lon="-118"><ele>10</ele><time>2022-01-01T00:00:38Z</time></trkpt>
+<trkpt lat="33.060018" lon="-118"><ele>10</ele><time>2022-01-01T00:05:00Z</time></trkpt>
+<trkpt lat="33.0602" lon="-118"><ele>10</ele><time>2022-01-01T00:05:30Z</time></trkpt>
+</trkseg></trk></gpx>

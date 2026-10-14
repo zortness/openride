@@ -5,7 +5,10 @@ and ignored local configuration in [build/](../build/README.md). Dot-source
 `./build/Use-Environment.ps1` before the commands below, or use `build/run.ps1`
 for a single command. This configures only the current process and its children.
 
-Audience: contributors building or validating M1. See [M1 progress](m1-progress.md) for current verification limits and [milestones](milestones.md) for the acceptance gate.
+Audience: contributors building and validating the Windows app. Start with the
+[README setup](../README.md#first-time-setup-windows-x64), [M7 progress](m7-progress.md)
+and [road-first authoring](road-first-authoring.md). The importer commands below
+also document the older section-based workflow.
 
 For M2 hardware diagnostics, run `./tools/probe-devices.ps1` from normal PowerShell. See [M2 progress](m2-progress.md) for the read-only BLE probe's scope, capture files, and current hardware verification limits.
 
@@ -92,16 +95,21 @@ For native visual inspection, run normally with both `--import=ABSOLUTE_TCX_PATH
 
 ## Windows export
 
-Install the Windows export templates matching Godot 4.6.2, build the release bridge, and export:
+Install the Windows export templates matching Godot 4.6.2, then build and export:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/build.ps1 -Release
-New-Item -ItemType Directory -Force dist
-godot --headless --path apps/rider --export-release "Windows Desktop" ../../dist/OpenRide.exe
-Copy-Item target/release/device-probe.exe dist/device-probe.exe
+. ./build/Use-Environment.ps1
+$env:APPDATA = Join-Path (Get-Location) 'local/godot-appdata'
+./tools/export-rider.ps1 -Offline
 ```
 
-Keep the generated executable, PCK, extension DLL, and device-probe.exe together as exported. Test the actual executable with the development project closed, including opening external activities and reopening an exported route. No private inputs are inside the Godot project or export resources.
+The export script first runs the release build with locked Cargo dependencies,
+including `openride-godot`, `device-probe`, `content-builder`, and `openride-author`.
+Keep the entire `dist` folder together: executable, PCK, extension DLL, device
+worker, and both native tools in `authoring/`. New Ride Projects need no Python
+interpreter. Python files are bundled only for the legacy section builder.
+Test the actual executable with the development project closed. No private inputs
+are inside the Godot project or export resources.
 
 The exported runtime includes an opt-in RPV verification command. It imports the external TCX, exports samples 100–800, validates reopening, and exits with a nonzero status on failure. Supply absolute paths and an output filename that does not exist:
 
@@ -110,6 +118,13 @@ The exported runtime includes an opt-in RPV verification command. It imports the
 ```
 
 Success prints `NATIVE_OK`. Windows GUI executables may return control to PowerShell before exiting; automation should use `Start-Process -Wait -PassThru` and inspect `ExitCode`. The same verification logic is used by `tests/native.gd` in the editor runtime.
-# Python launcher on the development PC
+## Native route CLI and legacy Python
 
-Command examples use `python`. The WindowsApps launcher is first on PATH but currently fails inside the agent tool environment with “The file cannot be accessed by the system.” Use `C:/Users/zortn/AppData/Local/Python/bin/python.exe` there; it resolves to Python 3.14.6 and the 30 authoring-tool tests pass with it. Thonny's bundled interpreter is no longer the preferred fallback. This does not require changing the user's PATH.
+After building, run `./apps/rider/bin/openride-author.exe --help`, or use
+`./dist/authoring/openride-author.exe --help` after exporting. See
+[road-first authoring](road-first-authoring.md) for road choices, recorded
+connections, and the project workflow shared by the CLI and UI.
+
+For legacy Python commands, load `build/Use-Environment.ps1` or use
+`./build/run.ps1 python ...`. Configure executable overrides in the ignored
+`build/environment.local.psd1`; do not hardcode a contributor's installation path.

@@ -6,7 +6,8 @@ profile. It produces the existing streamed `.orpack` format. The whole-recording
 builder, OSM corridor processing, imagery and distant terrain remain later work.
 The original Create workflow retains its 5 km restriction. The newer
 [corridor job runner](m7-corridor-preparation.md) orchestrates resumable regional
-preparation across a complete recording; unified full-route assembly remains open.
+preparation across a complete recording; the [continuous assembler](continuous-corridor-packages.md)
+now rebuilds those verified sources into one package within its documented bounds.
 
 Accepted local repairs from the sparse preview feed this same native profile.
 Inspect and save each repair explicitly, then create a new plan to bind the new
@@ -108,6 +109,7 @@ tests, exported library/power-demo checks, short-route UX regression and rejecti
 of corrupted provenance passed. The OC rendering was visually inspected.
 
 S03 remains open for a reviewed Death Ride mountain section and user elevation/
-repair acceptance. The four OC continuity repairs are now accepted. Corridor-wide
-planning found seven additional raw-grade blockers; resolving those and completing
-unified package assembly precede a complete 153 km package.
+repair acceptance. The OC continuity repairs and four automatic grade blends are
+accepted. The [continuous assembler](continuous-corridor-packages.md) now builds
+the full 153.126 km OC package; exported traversal and shared edges passed. This
+does not close the remaining Death Ride or performance/hardware gates.

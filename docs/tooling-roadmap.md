@@ -1,7 +1,10 @@
 # Native authoring tooling and agent workflows
 
 Recorded 2026-10-11 during initial repository publication preparation.
-Recommendations below are not an authorized bulk rewrite.
+The authoring migration is now approved for M7 (2026-10-13), delivered incrementally
+through [S08–S23](m7-authoring-repair-tasks.md). The historical recommendations
+below remain useful migration guidance. S08 introduces `openride-author` for
+project lifecycle; later slices port each production authoring stage behind it.
 
 ## Native authoring direction
 

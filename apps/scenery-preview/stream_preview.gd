@@ -4,6 +4,7 @@ var hud: PanelContainer
 var road_metadata: Array = []
 var credits: Label
 var ground_material: ShaderMaterial
+var coarse_material: ShaderMaterial
 var asphalt_material: ShaderMaterial
 var ride_seconds := 0.0
 var training_entry := false
@@ -69,6 +70,10 @@ var worker_key := Vector2i.ZERO
 var lookahead = preload("res://route_traversal.gd").new()
 var peak_cached := 0
 var discarded_count := 0
+var image_live := {}
+var peak_image_live := 0
+var image_loads := 0
+var tiled_imagery_expected := false
 var max_commit_ms := 0.0
 var prefetch_hits := 0
 var cache_was_prefetch := {}
@@ -237,6 +242,9 @@ func _ready() -> void:
 		await benchmark(benchmark_seconds)
 		return
 	if automatic:
+		# Offline traversal checks need every station and load/unload transition,
+		# but no display frame pacing. Rendered checks retain the normal pacing.
+		if DisplayServer.get_name()=="headless":Engine.max_fps=0
 		# Exercise changing targets while a read is in flight.
 		pump_chunks()
 		seek(traversal.length_m)
@@ -245,16 +253,20 @@ func _ready() -> void:
 		seek(0)
 		if not await wait_for_neighborhood(): return
 		for metre in range(0,int(traversal.length_m)+1,25):
+			if metre%10000==0:print("STREAM_TRAVERSAL_PROGRESS distance_m=",metre," length_m=",traversal.length_m)
 			seek(metre)
 			if not await wait_for_neighborhood(): return
 			if riding_view and (absf(camera.position.y-target.y-1.65)>0.001 or not camera.transform.is_finite()):
 				fail("Invalid riding camera pose");return
-			for frame in range(4): await get_tree().process_frame
+			for frame in range(1 if DisplayServer.get_name()=="headless" else 4): await get_tree().process_frame
 		seek(traversal.length_m)
 		if not await wait_for_neighborhood(): return
 		if peak_live>9 or peak_cached>3 or loaded_count<=peak_live or unloaded_count==0:
 			fail("Streaming did not demonstrate bounded loading/unloading");return
 		print("STREAM_TRAVERSAL_OK cells=",chunk_index.size()," peak_live=",peak_live," peak_payload_bytes=",peak_bytes," loads=",loaded_count," unloads=",unloaded_count," route_points=",traversal.points.size()," max_main_update_ms=",max_update_ms," peak_cached=",peak_cached," max_mesh_commit_ms=",max_commit_ms," prefetch_hits=",prefetch_hits," stale_results_discarded=",discarded_count)
+		if tiled_imagery_expected:
+			if image_loads==0 or peak_image_live>9:fail("Tiled imagery residency check failed");return
+			print("TILED_IMAGERY_OK loads=",image_loads," peak_live_textures=",peak_image_live," peak_cached_chunks=",peak_cached)
 		if not snapshot.is_empty():
 			seek(traversal.length_m*snapshot_fraction)
 			if not await wait_for_neighborhood(): return
@@ -305,6 +317,8 @@ func load_package() -> bool:
 		var key:=Vector2i(int(entry.x),int(entry.z))
 		if entry.get("path")!="chunk_%d_%d.json" % [key.x,key.y] or chunk_index.has(key):
 			fail("Unsafe or duplicate chunk path");return false
+		if entry.has("imagery"):
+			if not entry.imagery is Dictionary or entry.imagery.get("path")!="imagery_%d_%d.png" % [key.x,key.y]:fail("Unsafe chunk imagery path");return false
 		var payload:=FileAccess.open(root_path.path_join(entry.path),FileAccess.READ)
 		if payload==null or payload.get_length()!=entry.get("bytes") or payload.get_length()>2*1024*1024:
 			fail("Incomplete stream package: "+entry.path);return false
@@ -328,8 +342,20 @@ func load_package() -> bool:
 			fail("Invalid coastal payload path");return false
 		var coast:Variant=checked_json(m.coast)
 		if coast==null or not load_coast(coast):return false
+	if m.has("coarse_terrain"):
+		if not m.coarse_terrain is Dictionary or m.coarse_terrain.get("path")!="coarse-terrain.json":fail("Invalid coarse terrain path");return false
+		var coarse:Variant=checked_json(m.coarse_terrain)
+		if not coarse is Dictionary:return false
+		var distant:=mesh_instance(coarse,Color("506b55"))
+		if failed:return false
+		if distant!=null:
+			coarse_material=ShaderMaterial.new();coarse_material.shader=preload("res://coarse_terrain.gdshader");distant.material_override=coarse_material;add_child(distant);coast_nodes.append(distant)
 	ground_material=ShaderMaterial.new();ground_material.shader=preload("res://ground_detail.gdshader");ground_material.set_shader_parameter("base_color",Color.WHITE)
 	asphalt_material=ShaderMaterial.new();asphalt_material.shader=preload("res://ground_detail.gdshader");asphalt_material.set_shader_parameter("base_color",Color("41454a"));asphalt_material.set_shader_parameter("road",true)
+	if m.has("tiled_imagery"):
+		if not m.tiled_imagery is Dictionary or m.tiled_imagery.get("schema_version")!=1 or m.tiled_imagery.get("width")!=130 or m.tiled_imagery.get("pixel_m")!=2:fail("Unsupported tiled imagery");return false
+		credits.text+=" | USGS / NAIP imagery · gaps use terrain shading"
+		tiled_imagery_expected=m.tiled_imagery.get("chunks_with_imagery",0)>0
 	if m.has("detail"):
 		if m.detail.get("path")!="presentation.json":fail("Invalid road metadata path");return false
 		var detail:Variant=checked_json(m.detail)
@@ -427,8 +453,19 @@ func mesh_instance(geometry: Dictionary, color: Color, lines: bool=false) -> Mes
 				if not (v is float or v is int) or not is_finite(v) or v<0 or v>1:fail("Invalid terrain color value");return null
 			colors.append(Color(c[0],c[1],c[2]))
 		arrays[Mesh.ARRAY_COLOR]=colors
+	if not lines and geometry.has("normals"):
+		if not geometry.normals is Array or geometry.normals.size()!=vertices.size():fail("Invalid chunk normal count");return null
+		var normals:=PackedVector3Array()
+		for n in geometry.normals:
+			if not n is Array or n.size()!=3:fail("Invalid chunk normal");return null
+			for v in n:
+				if not (v is float or v is int) or not is_finite(v) or absf(v)>1.001:fail("Invalid chunk normal component");return null
+			var vector:=Vector3(n[0],n[1],n[2])
+			if absf(vector.length()-1)>0.001:fail("Invalid chunk normal length");return null
+			normals.append(vector)
+		arrays[Mesh.ARRAY_NORMAL]=normals
 	var mesh:=ArrayMesh.new();mesh.add_surface_from_arrays(Mesh.PRIMITIVE_LINES if lines else Mesh.PRIMITIVE_TRIANGLES,arrays)
-	if not lines:
+	if not lines and not geometry.has("normals"):
 		var surface:=SurfaceTool.new();surface.create_from(mesh,0);surface.generate_normals();mesh=surface.commit()
 	var instance:=MeshInstance3D.new();instance.mesh=mesh;instance.material_override=material(color)
 	if lines or (not riding_view and color==Color("78aaff")):
@@ -447,6 +484,7 @@ func neighborhood(position: Vector3) -> Dictionary:
 
 func update_chunks(position: Vector3) -> void:
 	var started := Time.get_ticks_usec()
+	if coarse_material!=null:coarse_material.set_shader_parameter("nearby_cell",Vector2(floorf(position.x/256),floorf(position.z/256)))
 	wanted = neighborhood(position)
 	var ahead: Dictionary = lookahead.seek(traversal.distance_m+100.0)
 	prefetched = neighborhood(ahead.position)
@@ -454,6 +492,7 @@ func update_chunks(position: Vector3) -> void:
 		if not wanted.has(key):
 			live[key].free()
 			live.erase(key)
+			image_live.erase(key)
 			unloaded_count+=1
 	for key in cache.keys():
 		if not wanted.has(key) and not prefetched.has(key):
@@ -491,7 +530,9 @@ func pump_chunks() -> void:
 		var node := Node3D.new()
 		add_child(node)
 		live[key]=node
-		for kind in ["terrain","road","lines","buildings","roofs","context_roads","unpaved","markings","center_markings"]:
+		if geometry.has("_imagery_image"):
+			image_live[key]=true;image_loads+=1;peak_image_live=maxi(peak_image_live,image_live.size())
+		for kind in ["terrain","road","lines","buildings","roofs","water","context_roads","unpaved","markings","center_markings"]:
 			if not geometry.has(kind): continue
 			if not geometry[kind] is Dictionary and kind!="lines":
 				fail("Invalid scenery geometry");return
@@ -505,8 +546,16 @@ func pump_chunks() -> void:
 			if instance!=null:
 				if kind=="buildings":instance.material_override.albedo_color=Color("cbbda4")
 				if kind=="roofs":instance.material_override.albedo_color=Color("806f63")
+				if kind=="water":instance.material_override.albedo_color=Color("357c92");instance.material_override.roughness=0.25
 				if kind in ["road","context_roads"]:instance.material_override=asphalt_material
 				if kind=="terrain" and not road_metadata.is_empty():instance.material_override=ground_material
+				if kind=="terrain" and geometry.has("_imagery_image"):
+					var imagery_material:=ShaderMaterial.new();imagery_material.shader=preload("res://ground_detail.gdshader")
+					imagery_material.set_shader_parameter("base_color",Color("506b55"))
+					imagery_material.set_shader_parameter("imagery",ImageTexture.create_from_image(geometry._imagery_image))
+					imagery_material.set_shader_parameter("use_imagery",true)
+					imagery_material.set_shader_parameter("imagery_bounds",Vector4(key.x*256-2,key.y*256-2,260,260))
+					instance.material_override=imagery_material
 				if kind=="unpaved":instance.material_override.albedo_color=Color("9d8a63")
 				if kind=="markings":instance.material_override.albedo_color=Color("eee9ce")
 				if kind=="center_markings":instance.material_override.albedo_color=Color("e3b948")

@@ -1,5 +1,15 @@
 # M7 — Full-route authoring implementation roadmap
 
+Direction updated 2026-10-13: [road-first authoring](road-first-authoring.md)
+supersedes mandatory recording-geometry/elevation repair for road rides. Recordings
+provide evidence; roads and terrain define the generated course. Preserve existing
+repair decisions as reference and retain the acceptance gates below.
+
+Extension approved 2026-10-13: [S08–S23 authoring repair tasks](m7-authoring-repair-tasks.md)
+add Ride Projects, a Rust authoring CLI, full-corridor course/scenery creation and
+ZIP sharing. This is part of M7; the S01–S07 acceptance gates below remain open
+until their evidence is recorded. Start the new sequence with S08.
+
 Approved 2026-10-11. S01 review, initial S02 preview and a bounded S03 multi-tile
 section build are available; see
 [M7 progress](m7-progress.md). This roadmap follows the

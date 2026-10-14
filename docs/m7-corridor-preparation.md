@@ -1,11 +1,12 @@
 # M7 resumable corridor preparation
 
-This initial S04 implementation plans an entire reviewed recording and runs
+The S04 tooling plans an entire reviewed recording and runs
 terrain acquisition, OSM acquisition and regional terrain/road baking as separate
 resumable stages. It produces independently inspectable regional packages.
-It does **not** yet assemble one full-route rider package or reconcile terrain
-meshes between regional coordinate frames. S04 remains open, including the Death
-Ride terrain/OSM acceptance gate.
+The [continuous assembler](continuous-corridor-packages.md) can now rebuild verified
+regional terrain into one package on a shared grid, with one route profile and road
+surface. S04 remains open, including Death Ride/OSM acceptance and broader scale
+and recovery checks.
 
 ## Commands
 
@@ -80,13 +81,37 @@ index remain resident; baking processes one region at a time. This is not a
 measured minimum-hardware or memory-budget acceptance result.
 
 Regional boundaries preserve canonical geography, elevation and source distance.
-Local terrain lattices and presentation earthwork are still independent across
-regions. Do not concatenate these packages or treat regional traversal as evidence
-of a continuous full-route world. Remaining work includes cross-region terrain
-ownership/seams, unified route/profile streaming and package assembly, OSM scenery
-processing, and full-route offline/performance verification.
+The individual regional packages still have independent local grids. Do not
+concatenate them: use the continuous assembler to regenerate shared terrain and
+road geometry from verified sources. See its stricter 200 km/10,000-point bounds.
+OSM scenery integration, larger-scale profile streaming, and full-route
+performance/hardware acceptance remain open.
 
 ## Current OC result
+
+The full repaired corridor now has verified terrain for all 20 regions. The
+[continuous assembler](continuous-corridor-packages.md) produced one 153.126048 km
+package with 3,716 canonical points and 1,431 chunks. Exported full traversal
+passed with at most nine live and three cached chunks. Every payload hash and
+44,652 shared-edge comparisons passed, with unchanged source snapshots and route
+data. Terrain-only overlap feathering was explicitly enabled within local
+variation and 10 m bounds. M7 performance and hardware gates remain open.
+
+The following preparation results are historical:
+
+Latest preparation: the repaired revision has verified terrain and independent
+packages for regions 0000–0002 (0–24 km). The new third region uses 14 terrain tiles
+and 79 streamed chunks; exported traversal passed with 921 route points and peak
+nine live / three cached chunks. Its grade findings do not require a steep override.
+The [native route audit](route-rideability-audit.md) also completed the entire
+153 km profile at three test powers, without modifying the remaining raw grades.
+
+Follow-up on 2026-10-12: the user approved four bounded elevation blends, now
+implemented in [automatic import repair](automatic-route-repairs.md). They remove
+the seven >100% findings described below. The new corridor revision plans all 20
+regions without blockers; 30 >15% source segments still require review. Existing
+regional packages remain associated with the previous revision. Full-route package
+assembly remains open.
 
 On 2026-10-12 the accepted recording planned into 20 regions over 153.126048 km.
 Four regions are blocked by seven additional raw-grade segments above 100%; these

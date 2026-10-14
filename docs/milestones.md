@@ -157,13 +157,32 @@ and M6 and should be tracked once, with results linked from both milestones.
 
 ## M7 — Full-route authoring and inspection
 
+Current direction (2026-10-13): [road-first recreation](road-first-authoring.md).
+Infer a connected road sequence from the recording, review uncertain road choices,
+and generate the course from roads and terrain. The four-stage editor replaces
+mandatory trace/elevation repair in the default workflow. Legacy projects and
+recordings remain preserved. Road exceptions and full acceptance remain open.
+
 Agreed 2026-10-11 as a separate milestone; the [seven-slice implementation roadmap](m7-roadmap.md)
 is approved and implementation is underway. Validation recordings: Death Ride, L'Étape du California and OC
 to Solana Beach; both TCX/GPX variants have passed initial read-only intake.
 See the [M7 brief](m7-full-route-authoring.md) and [M7 progress](m7-progress.md).
 S01 full-recording intake/saved review and an initial S02 sparse full-route preview
-are available. A bounded S03 multi-tile builder now packages an OC 8 km section.
-Full-route scenery preparation and acceptance remain open. M6 remains open independently.
+are available. The continuous corridor assembler now packages the full 153.126 km
+OC route, with exported traversal and shared terrain edges verified. Other
+recordings, scenery detail and performance/hardware acceptance remain open.
+M6 remains open independently.
+
+The 2026-10-13 [authoring extension](m7-authoring-repair-tasks.md) adds S08–S23:
+project-first UX, one native Rust CLI and ZIP sharing. S08 project lifecycle and
+S09 full-source import/comparison are implemented. Project gap/tiny-loop repair,
+full-corridor terrain/street acquisition and native street matching/course editing
+are available. Native continuous terrain/road builds, preview opening and ZIP
+sharing are integrated. S16-S20 now include streamed imagery, coarse distant
+terrain, editable buildings/vegetation/water and conservative coastline assembly.
+The 150 km synthetic package passes bounded streaming checks. Representative
+real-route scenery/bridge acceptance, complex coastlines, legacy migration and
+full authoring acceptance remain open.
 
 Outcome: import a complete personal ride beyond the current 5 km authoring cap,
 inspect and repair it as one 3D project, and build one offline streamed package.

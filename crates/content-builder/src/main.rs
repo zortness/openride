@@ -2,13 +2,57 @@ use std::path::Path;
 
 fn run() -> Result<(), String> {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if args.len() == 3 && args[0] == "--review-audit" {
+        let review = ride_core::source_review::open(Path::new(&args[1]))?;
+        let profile = ride_core::full_route::Profile::from_review(&review)?;
+        let trials = [150., 200., 250.]
+            .into_iter()
+            .map(|power| ride_core::route_audit::rehearse(&profile, power, 86400))
+            .collect::<Result<Vec<_>, _>>()?;
+        let report = serde_json::json!({
+            "kind":"openride.route-audit", "schema_version":1,
+            "review_revision":review.revision,"geometry_source":review.document.geometry_source,
+            "length_m":profile.length_m(),"point_count":profile.points.len(),
+            "assumptions":{"total_mass_kg":85,"physics":"Simulation default configuration; constant power; 20 ms physics ticks", "time_limit_seconds":86400},
+            "limitations":"Software profile rehearsal only; no scenery, hardware, endurance or steep-grade acceptance. Context grades do not replace raw grades.",
+            "steep_findings":ride_core::route_audit::steep_findings(&profile),"rehearsals":trials
+        });
+        ride_core::save_new(
+            &args[2],
+            &serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?,
+        )?;
+        for trial in trials {
+            println!(
+                "{} W: {} at {:.3} km after {:.1} simulated minutes",
+                trial.power_w,
+                trial.status,
+                trial.distance_m / 1000.,
+                trial.simulated_seconds / 60.
+            );
+        }
+        return Ok(());
+    }
+    if args.len() == 3 && args[0] == "--repair-review" {
+        let directory = Path::new(&args[1]);
+        let review = ride_core::source_review::open(directory)?;
+        let saved = ride_core::source_review::save(directory, &args[2], review.document)?;
+        println!("Saved automatic repair review revision {}", saved.revision);
+        return Ok(());
+    }
     if args.len() == 3 && args[0] == "--review-repairs" {
         let review = ride_core::source_review::open(Path::new(&args[1]))?;
         let repairs = ride_core::route_repairs::comparisons(&review)?;
-        ride_core::save_new(&args[2], &serde_json::to_string_pretty(&serde_json::json!({
-            "review_revision":review.revision,"repairs":repairs
-        })).map_err(|e|e.to_string())?)?;
-        println!("Exported {} repair comparisons; saved review unchanged", repairs.len());
+        ride_core::save_new(
+            &args[2],
+            &serde_json::to_string_pretty(&serde_json::json!({
+                "review_revision":review.revision,"repairs":repairs
+            }))
+            .map_err(|e| e.to_string())?,
+        )?;
+        println!(
+            "Exported {} repair comparisons; saved review unchanged",
+            repairs.len()
+        );
         return Ok(());
     }
     if args.len() == 3 && args[0] == "--review-profile" {

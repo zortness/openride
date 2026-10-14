@@ -1,7 +1,8 @@
 //! Engine-independent activity import and route inspection. No engine or network access.
-pub mod source_review;
 pub mod full_route;
+pub mod route_audit;
 pub mod route_repairs;
+pub mod source_review;
 use chrono::DateTime;
 use quick_xml::{events::Event, Reader};
 use serde::{Deserialize, Serialize};
@@ -301,20 +302,47 @@ pub fn import_xml(xml: &str, source_name: &str) -> Result<Activity> {
         }
         "kml" => {
             a.format = "KML".into();
-            if let Some(name) = root.all("Placemark").first().and_then(|n|n.text("name")) {a.name=name.into();}
-            for (segment,line) in root.all("LineString").iter().enumerate() {
-                let coordinates=line.text("coordinates").ok_or("KML LineString has no coordinates")?;
+            if let Some(name) = root.all("Placemark").first().and_then(|n| n.text("name")) {
+                a.name = name.into();
+            }
+            for (segment, line) in root.all("LineString").iter().enumerate() {
+                let coordinates = line
+                    .text("coordinates")
+                    .ok_or("KML LineString has no coordinates")?;
                 for coordinate in coordinates.split_whitespace() {
-                    let parts:Vec<_>=coordinate.split(',').collect();
-                    if !(2..=3).contains(&parts.len()) {return Err("Invalid KML coordinate tuple".into());}
-                    let values:Vec<f64>=parts.iter().map(|v|v.parse::<f64>().map_err(|_|"Invalid KML number".to_string())).collect::<Result<_>>()?;
-                    if values.iter().any(|v|!v.is_finite()) || values[0].abs()>180. || values[1].abs()>90. {return Err("Invalid KML geographic coordinates".into());}
-                    a.samples.push(Sample {longitude:Some(values[0]),latitude:Some(values[1]),
-                        elevation_m:if line.text("altitudeMode")==Some("absolute") {values.get(2).copied()} else {None},
-                        segment,..Default::default()});
+                    let parts: Vec<_> = coordinate.split(',').collect();
+                    if !(2..=3).contains(&parts.len()) {
+                        return Err("Invalid KML coordinate tuple".into());
+                    }
+                    let values: Vec<f64> = parts
+                        .iter()
+                        .map(|v| {
+                            v.parse::<f64>()
+                                .map_err(|_| "Invalid KML number".to_string())
+                        })
+                        .collect::<Result<_>>()?;
+                    if values.iter().any(|v| !v.is_finite())
+                        || values[0].abs() > 180.
+                        || values[1].abs() > 90.
+                    {
+                        return Err("Invalid KML geographic coordinates".into());
+                    }
+                    a.samples.push(Sample {
+                        longitude: Some(values[0]),
+                        latitude: Some(values[1]),
+                        elevation_m: if line.text("altitudeMode") == Some("absolute") {
+                            values.get(2).copied()
+                        } else {
+                            None
+                        },
+                        segment,
+                        ..Default::default()
+                    });
                 }
             }
-            if a.samples.is_empty() {return Err("KML requires LineString geometry; points, polygons, NetworkLinks and gx:Track are not supported".into());}
+            if a.samples.is_empty() {
+                return Err("KML requires LineString geometry; points, polygons, NetworkLinks and gx:Track are not supported".into());
+            }
         }
         "TrainingCenterDatabase" => {
             a.format = "TCX".into();

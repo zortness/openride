@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch, MagicMock
+import urllib.error
 import urllib.parse
 
 spec = importlib.util.spec_from_file_location("acquire", Path(__file__).parents[1] / "acquire-scenery.py")
@@ -11,6 +13,25 @@ spec.loader.exec_module(module)
 
 
 class AcquisitionTests(unittest.TestCase):
+    def test_download_retries_transient_image_errors_but_not_permanent_errors(self):
+        response=MagicMock()
+        response.__enter__.return_value.read.return_value=b'II*\x00terrain'
+        transient=urllib.error.HTTPError('https://example.test/tile',504,'Timeout',{},None)
+        with patch.object(module.urllib.request,'urlopen',side_effect=[transient,response]) as fetch, patch.object(module.time,'sleep') as sleep:
+            self.assertEqual(module.download('https://example.test/tile'),b'II*\x00terrain')
+            self.assertEqual(fetch.call_count,2)
+            self.assertIs(fetch.call_args_list[0].args[0],fetch.call_args_list[1].args[0])
+            sleep.assert_called_once_with(2)
+        permanent=urllib.error.HTTPError('https://example.test/tile',404,'Missing',{},None)
+        with patch.object(module.urllib.request,'urlopen',side_effect=permanent) as fetch, patch.object(module.time,'sleep') as sleep:
+            with self.assertRaises(urllib.error.HTTPError):module.download('https://example.test/tile')
+            self.assertEqual(fetch.call_count,1);sleep.assert_not_called()
+
+    def test_download_retry_budget_is_bounded(self):
+        with patch.object(module.urllib.request,'urlopen',side_effect=TimeoutError('timeout')) as fetch, patch.object(module.time,'sleep'):
+            with self.assertRaises(TimeoutError):module.download('https://example.test/tile')
+            self.assertEqual(fetch.call_count,3)
+
     def test_separate_stages_resume_without_refetching_terrain(self):
         with tempfile.TemporaryDirectory() as tmp:
             source=Path(tmp)/'preparation.json'

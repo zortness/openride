@@ -1,5 +1,18 @@
 # M7 — Full-route authoring and inspection
 
+Current approved approach (2026-10-13): [road-first recreation](road-first-authoring.md).
+The default workflow infers roads from the recording, reviews uncertainty and builds
+a terrain-derived course. Recorded geometry/elevation repair is now an advanced
+compatibility path rather than a prerequisite for ordinary road rides.
+
+Scope extension approved 2026-10-13: [S08–S23](m7-authoring-repair-tasks.md) establish
+Create/Open Ride Project, multi-source full-ride import, gap/tiny-loop repair,
+full-corridor maps, road/path matching and direct course/scenery edits. All normal
+authoring moves into one Rust CLI called by the UX. Fixed project-relative files
+replace internal file pickers; import logs are hidden by default; compiled content
+shares as ordinary ZIP and loads packed or unpacked. Existing accepted edits and
+the original performance/hardware gates are preserved.
+
 Status: implementation started 2026-10-11. S01 full-ride intake/saved review and
 the initial S02 full-route sparse preview are available. A bounded S03 multi-tile
 builder has produced an OC 8 km terrain/road package; see [M7 progress](m7-progress.md).
@@ -109,7 +122,8 @@ distance and repairs; one streamed package; boundary and resource validation;
 ### Out of Scope
 
 M6 device compatibility and virtual shifting, Android, multiplayer, junction
-navigation, global map coverage and a wholesale authoring-language migration.
+navigation and global map coverage. Native authoring migration is now in M7 via
+the approved S08–S23 extension; developer build/test scripts may remain.
 
 ### Non-Goals
 

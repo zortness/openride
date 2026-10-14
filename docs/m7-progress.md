@@ -1,5 +1,298 @@
 # M7 progress
 
+## Road-first refactor — 2026-10-13
+
+Preview readiness follow-up: Preview now explains road/scenery blockers and shows
+remaining topography coverage. With road review complete, its build action resumes
+terrain acquisition and queues the build using the existing cancellation/error
+handling. Recorded-connection controls are collapsed under Advanced on Roads.
+
+2026-10-14: short disconnected road transitions now offer an explicit recorded
+connection with map preview and undo in the road-first editor. `roads.json` stores
+the occurrence endpoints separately from road choices; inference revalidates the
+continuous recording and 250 m limit. Changed endpoints fail without publishing
+a replacement. The accepted geometry uses terrain heights and manual terrain
+clearance rather than inheriting bridge/tunnel tags from a neighboring way.
+Synthetic regression coverage includes preservation of choices, save/reopen,
+reinference, terrain package build, undo, stale writers, and rejecting long or
+missing-recording links.
+
+Road review usability follow-up: saved, resolved road choices remain in the review
+list with an Accepted checkmark. Automatic matches remain distinct and need no
+action; Next to review skips accepted choices. Numbered road labels match dropdown
+options (including unnamed ways), with amber highlighting for the selected option
+and wider/closer context controls. These indicators use saved course state, so they
+survive reopening without introducing another project file.
+
+Road-choice propagation: the explicit stretch action applies a choice to nearby
+ambiguous visits along an unbranched connected road chain, bounded to 5 km each
+way. Gaps, turnarounds, other saved choices and departures stop expansion. The
+native CLI uses `choose-road --scope nearby`; grouped undo metadata lives in
+`roads.json`, preserving later individual edits. Regression coverage includes
+same-name disconnected roads, named branches, breaks, repeated visits, stale
+writers, persistence and grouped undo.
+
+The owner approved recreating road rides from an inferred road sequence rather
+than treating recorded geometry/elevation as the course. The native default and
+four-stage editor now implement [that approach](road-first-authoring.md).
+
+- New `infer-roads`, `choose-road` and `reset-roads` CLI operations save a separate
+  `roads.json`, preserve legacy artifacts and enforce source/map revision checks.
+  Forward/backward scoring uses neighboring observations, connected OSM topology,
+  road eligibility and one-way direction. Intermediate way identities and repeated
+  occurrences remain explicit. Uncertain stretches are grouped for review.
+- The editor now has Recording, Roads, Preview and Scenery & share stages, with
+  persistent navigation and independently scrolling pages. Named road alternatives
+  appear beside the map; recording diagnostics and legacy tools are collapsed.
+  Download maps & infer roads runs planning, resumable downloads and inference in
+  sequence; cancellation stops subsequent stages. Restart archives old choices.
+- Road profiles sample terrain at <=30 m spacing with a local smoothing window;
+  recorded elevation is no longer required or authoritative. Bridge/layer profiles
+  interpolate between terrain-supported endpoints. Tunnel builds explicitly fail
+  until interior geometry exists. Existing trace-based builds retain their prior
+  semantics. New geometry still uses the shared terrain/chunk/imagery/scenery system.
+
+Validation: locked/offline workspace passed; the final native authoring suite has
+34 passing normal tests, including sequence disambiguation, grouped alternatives,
+road eligibility, missing recorded elevations, terrain-derived profiles, archived
+choices, stale writers and preservation of legacy files. All 90 Python compatibility
+tests passed. The exported editor passed four-stage navigation, cached map
+preparation/inference, named choice save/reopen/undo, scenery editing and package
+build/export/open. Rendered editor and preview screenshots were inspected.
+
+Cached real OC inference took about 3.3 s: 153.758 km, 3,224 retained observations,
+147 unresolved stretches (141 road ambiguities, five recording gaps, one disconnected
+transition). These are still proposals, not accepted choices. This grouped count
+is not directly comparable to the old per-observation issue count. The synthetic
+150.113 km road-first course has zero unresolved stretches and builds 1,176 chunks;
+latest repeat build took 13.6 s. A 20 m profile initially exceeded the 2 MiB runtime
+route budget; the tested 30 m spacing fits without changing fine road-mesh sampling.
+The final exported offline traversal passed all 150.113 km with 5,401 profile
+points, six live chunks and two cached chunks at peak. Imagery loaded/unloaded
+correctly over its synthetic start coverage. Headless traversal is not a GPU
+performance acceptance benchmark.
+
+Remaining: real OC road-choice review and missing connection, representative bridge
+heights, tunnel interior geometry, turn restrictions, sparse recording transitions
+beyond 500 m and existing scenery/performance/hardware acceptance. Legacy migration
+must preserve old elevation decisions as reference, not apply them silently to a
+new road-derived profile. This refactor does not close all M7 acceptance gates.
+
+Visual validation follow-up: the owner found buried road/camera geometry near
+1.22 km remaining in the short synthetic fixture. Manual/trace edits had been
+classified with elevated structures, suppressing terrain clearance. They now
+allow lowering terrain without raising an embankment; tagged structures and
+stacked crossings retain their exclusions. A compiled-terrain regression covers
+the edited segment and return. All 30 native authoring tests passed, and a fresh
+rendered traversal/screenshot at 1.22 km remaining shows the road and camera clear
+of terrain. The bundled authoring binary and short fixture were rebuilt.
+The earlier description of the midpoint screenshot as a water crossing was
+incorrect: the synthetic lake is beside the road. Water currently uses a simple
+colored material, without animated waves or a dedicated water shader.
+
+## 2026-10-13: S16-S20 native scenery continuation
+
+This checkpoint supersedes the implementation status in the earlier continuation
+below. Native packages now include tiled imagery, coarse distant terrain,
+buildings, vegetation and water. The project editor acquires each scenery layer,
+edits polygon boundaries/holes and properties, and saves/hides/undoes/resets
+project-owned overrides through the bundled Rust CLI. Changed source fingerprints
+produce conflicts; no correction-file selection or interpreter is required.
+
+Imagery uses a shared 2 m lattice with matching gutters, an eight-source-image
+baker cache and nearby runtime textures. Transparent/missing pixels retain terrain
+shading. Immutable builds bind imagery receipts and scenery revisions; the UI
+reports stale builds, coverage and warnings. ZIP validation includes the new
+assets. Coarse terrain uses a 128 m lattice outside nearby detailed cells.
+
+Buildings retain footprint holes, use tagged height/levels or a documented 6 m
+default, and keep clear of the course. Deterministic vegetation respects density,
+water/building/exclusion masks and a per-chunk candidate budget. Water preserves
+holes and shared surface levels while lowering underlying terrain without changing
+course elevations. Directed coastline assembly handles a simple crossing with
+contained islands. Incomplete, branched or multiple-crossing coastlines are
+reported rather than filled speculatively. Inferred water levels and nominal 0 m
+sea level remain preview approximations requiring review.
+
+Fresh validation after implementation:
+
+- Locked/offline Rust workspace passed, including six scenery regressions for
+  topology, chunk edges, placement/clearance, persistence, acquisition and conflicts.
+- Explicit synthetic 150 km release assembly regression passed in 49.51 s,
+  including terrain/imagery seams, native ZIP assets and rebuild/failure behavior.
+- Release build/export passed. Exported rendered editor emitted
+  `PROJECT_SCENERY_OK polygon_save hide undo reset native_cli` and
+  `PROJECT_BUILD_PREVIEW_OK native_geometry runtime_loaded`.
+- Exported headless traversal covered 150.113 km and 1,176 chunks with six live
+  chunks/textures and two cached chunks at peak. Only the start has synthetic
+  imagery: 26 image loads exercise unloads and the distant missing-image fallback.
+  This is a bounded-loading check, not a GPU performance benchmark.
+- Rendered 2.224 km traversal passed; the initial screenshot review missed buried
+  terrain at the manual edit (see follow-up above). All 90 Python regressions passed after rerunning
+  outside the sandbox's Windows temporary-directory restriction.
+- Live acquisition of one OC tile per layer produced 1,101 buildings, nine
+  vegetation areas and ten water features with no catalog warnings. This is a
+  real-source ingestion smoke test, not complete real-route scenery acceptance.
+
+Remaining gates: representative real buildings/coasts/bridges and water levels,
+full-corridor real imagery/scenery appearance and GPU budgets, complex coastline
+topology, selective geometry regeneration (unchanged assets are reused but geometry
+is recomputed), S22 legacy/elevation-blend migration and S23 acceptance. Raw OC
+course issues still require review; accepted legacy elevation blends are untouched.
+Hardware/endurance gates remain deferred. Task checkboxes retain these acceptance
+requirements rather than treating implementation as milestone closure.
+
+## Earlier native authoring checkpoint
+
+2026-10-13 native authoring continuation: S10/S11 project-owned repair proposals,
+S12 corridor terrain, S13-S15 street graph/matching/editing, S16 imagery acquisition
+and map inspection, S17 native terrain/road assembly, and S21 ZIP integration now
+have implementations. This is partial milestone delivery; acceptance gates remain
+open where listed below. Accepted legacy OC elevation blends are untouched.
+
+Gap closure preserves heights and offers only bounded recording-pause joins;
+tiny-loop proposals preserve larger loops, out-and-backs and later visits.
+Decisions are persistent and undoable. Connected road/path matching keeps
+ambiguities, disconnected crossings and missing coverage explicit. The editor
+supports road choices, trace acceptance, edited endpoints, gap joins and undo,
+with source-occurrence identities and revision conflicts. Rename preserves edits.
+
+All 112 OC terrain tiles and all 112 street tiles downloaded and validated;
+the merged graph has 45,013 street ways. Bounded street-only queries avoid the
+timeouts observed with broad scenery requests; paced requests and Retry-After
+handling resume rate-limited jobs. Full raw-route plans cover OC (153.097 km,
+112 tiles), L'Etape (163.176 km, 62 tiles), and Death Ride (170.933 km, 64 tiles).
+One real L'Etape NAIP tile passed native PNG validation and bounded map inspection.
+Full-route 3D imagery streaming is still pending.
+
+Native assembly builds continuous terrain/road packages with a shared 8 m lattice,
+256 m chunks, DEM reconciliation, content-hashed chunk reuse and immutable build
+versions. The UI builds, opens and exports to project-owned filenames. It refuses
+unresolved course issues or missing/alignment-ambiguous heights; steep grades
+require explicit preview acceptance. Builds remain unvalidated for trainer use.
+ZIP pack/validate/install accepts ordinary unpacked folders and rejects unsafe or
+unreferenced contents. Existing OC assets round-tripped through a 36.3 MB ZIP.
+
+Validation: locked/offline Rust workspace passed, including 24 native authoring
+tests; the additional explicit 150 km synthetic release test passed in 32.66 s
+including acquisition fixtures, matching, three builds and validation. Its 1,176
+chunks passed 42,283 shared-edge height/normal comparisons; repeat assembly reused
+all chunks. A local edit reused distant assets; failure/cancellation retained the
+previous build. Exported UI checks
+passed repair/reopen/undo, maps, course edit/undo, native build/open and ZIP flows.
+The 2.2 km native rendered traversal passed with six live chunks at peak. Full
+Python regression passed (90 tests). These are software checks, not hardware proof.
+
+Final exported headless traversals both passed: the native 150.113 km synthetic
+package (1,176 chunks, peak six live/two cached) and ZIP-installed accepted
+153.126 km OC package (1,431 chunks, peak nine live/three cached). Checks visited
+every 25 m, validated camera poses, exercised distant seeks and proved load/unload
+bounds. Headless verification omits display pacing and is not a rendered frame-rate
+benchmark. Exported UX regression also passed. All six original activity hashes
+and the accepted OC review hash were rechecked unchanged.
+
+The raw OC course has 830 unresolved occurrences after conservative matching;
+they have not been silently accepted. Its earlier accepted 153.126 km preview is
+preserved. Remaining work includes complete real-course review/parity, streamed
+3D imagery, S18-S20 editable scenery, S22 legacy migration/cutover and S23 complete
+integration/performance acceptance. Rebuilds reuse unchanged assets but currently
+recompute geometry; selective local regeneration remains open. Manual edits beyond
+the acquired corridor need coverage handling. Hardware/endurance gates remain open.
+
+The user authorized continuing through the approved slices without routine prompts
+and using disposable projects from multiple long recordings in `import/`.
+
+2026-10-13 S09: Ride Projects now import 1–8 complete GPX/TCX variants through
+`openride-author project import`. The Create screen compares recordings, displays
+full map/elevation plots and sample details, and saves independent geometry and
+elevation choices through `select-sources`. The import log is togglable and hidden
+by default. Sources use immutable hash-named files under `sources/`; review and
+log filenames are automatic. Revisions bind project and review state. Duplicate
+or unrelated recordings fail without publishing an imported stage. No automatic
+elevation repair, gap closure or road matching runs in this workflow.
+
+Validation: seven native project tests and the locked/offline Rust workspace
+passed; all 90 Python tests passed. Release build/export, rendered exported
+multi-file import, log toggle, moved-project reopen, persisted source choices and
+the existing UX regression passed. CLI intake of both supplied variants of OC,
+Death Ride and L'Étape passed with original source hashes unchanged. These private
+test projects retain raw source gaps; they do not replace the accepted OC review.
+
+S10 project gap repair is next. Select all source variants in one import batch;
+adding/replacing sources after intake is not yet supported. Optional section
+exports remain in the legacy workflow. M7 scenery, performance and supervised
+hardware acceptance gates remain open.
+
+2026-10-13: the [S08–S23 authoring breakdown](m7-authoring-repair-tasks.md) is approved.
+S08 is implemented: Create now opens a Ride Project overview with New/Open folder
+actions and persistent name/status. `openride-author` provides native project
+create/open/status/rename commands and a versioned JSON-lines contract. Project
+paths are relative; staged atomic saves, an exclusive writer lock and revision
+checks protect saved state. The release bundles the CLI in `authoring/`.
+See [Ride Project usage and recovery](ride-projects.md).
+
+Validation: locked/offline Rust workspace tests (including four new native project
+integration tests), all 90 Python tests, release build/export, exported native
+project lifecycle checks and existing UX regression passed. A rendered screenshot
+was inspected. The project check covers creation, moving/reopening through a fresh
+screen, rename persistence, stale-writer rejection and refusal to replace a
+nonempty folder. No trainer connection was made.
+
+S09 full-source import is next. The new project currently records an empty stage;
+the old section workflow remains accessible as Legacy section builder. This is
+not a claim that the whole authoring pipeline is native or that M7 is accepted.
+
+2026-10-12 continuous-package follow-up: the [corridor assembler](continuous-corridor-packages.md)
+now builds all 20 OC regions into one 153.126048 km package: 3,716 unchanged
+canonical route points, 1,431 chunks and 95,115,919 payload bytes. All terrain
+receipts, package hashes and original source snapshots verified. Across 44,652
+shared-edge comparisons, heights and normals matched exactly. Explicit bounded
+terrain overlap reconciliation handled nine sample calls (maximum source spread
+4.468 m, maximum derived height shift 1.891 m); route elevations remain unchanged.
+Retained steep segments are explicitly accepted for this unvalidated preview.
+
+Exported full traversal passed: peak nine live chunks, three cached chunks,
+798,038 live payload bytes, maximum main update 0.497 ms and mesh commit 3.548 ms.
+These headless measurements are observations, not reference-machine FPS/RAM/VRAM
+acceptance. The rendered continuous 24 km prefix also passed and its regional
+boundary was visually inspected. Projection corruption checks, 90 Python tests,
+locked/offline Rust workspace tests, release export and library/ride-entry checks
+passed; the library contains two valid packages and no invalid entries.
+
+M7 remains open: other validation recordings, OSM scenery, bridge/stacked-road
+terrain handling, incremental assembly recovery, resource measurements and the
+30-minute supervised hardware ride are not complete. Terrain acquisition resumes
+from verified cache; interrupted assembly retains staging but currently restarts.
+Earlier entries below describe the implementation history.
+
+2026-10-12 rideability follow-up: the new [read-only native route audit](route-rideability-audit.md)
+completed the full repaired OC route at 150, 200 and 250 W in the default physics
+model. The 30 retained >15% raw segments are short (0.36–2.22 m); their 20 m context
+grades are all below 12% in magnitude. No further elevation edits or steep-grade
+acceptance were made. This is a software profile result, not scenery or hardware
+acceptance. Whole-route assembly and regional seam reconciliation remain open.
+
+The repaired revision now has verified terrain and independently baked packages
+for 0–24 km (three regions). Thirty-three terrain tiles were reused; 14 more were
+acquired. An HTTP 502 recovered by retrying from verified cache. Exported traversal
+of the new 16–24 km region passed: 79 chunks, 921 route points, peak nine live and
+three cached chunks. Rust workspace tests and 81 Python tests passed. This does
+not verify cross-region transitions or close S04; the remaining regions and unified
+package/runtime assembly are still pending.
+
+2026-10-12 follow-up: [automatic import repairs](automatic-route-repairs.md) now
+apply conservative elevation-noise blends on source/decision saves, with native
+before/after comparisons and durable undo/reject. The four approved OC blends
+are saved; the seven >100% grade blockers are gone. A new revision-pinned corridor
+plans all 20 regions without blockers, preserving 153.126048 km, 3,716 points,
+source bytes and geography. Thirty segments still exceed 15% and require review.
+Original corridor artifacts remain available; unified package assembly is pending.
+
+Validation: locked/offline Rust workspace tests, 81 Python tests, Windows release
+build/export and exported automatic-import/repair accept/reject/undo/save/reopen
+checks passed. Synthetic and disposable OC reviews were exercised before applying
+the approved changes. This does not establish whole-route scenery or hardware gates.
+
 2026-10-12: initial [resumable corridor jobs](m7-corridor-preparation.md) now plan
 the complete accepted OC profile into 20 regions and independently resume terrain,
 OSM acquisition and regional baking. The first two regions have verified terrain
