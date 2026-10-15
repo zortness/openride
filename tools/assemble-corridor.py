@@ -294,7 +294,7 @@ def assemble(project,destination,builder,region_count=None,accept_steep=False,re
         raise ValueError('Review retained grades; --accept-steep retains them unchanged in this preview')
     frame,profile=route(source,end)
     route_raw=tiled.encoded(profile)
-    if len(route_raw)>2*1024*1024: raise ValueError('Canonical route exceeds existing 2 MiB runtime budget')
+    if len(route_raw)>8*1024*1024: raise ValueError('Canonical route exceeds 8 MiB runtime budget')
     staging_root=destination.parent/'.openride-assembly'
     staging_root.mkdir(exist_ok=True)
     workspace=staging_root/(destination.name+'-'+uuid.uuid4().hex)

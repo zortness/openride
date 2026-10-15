@@ -2,6 +2,21 @@
 
 ## Road-first refactor — 2026-10-13
 
+Long-route payload follow-up: canonical route JSON now permits 8 MiB across native
+assembly, package/ZIP validation, library and scenery loading, simulation/replay,
+the device worker and saved activity export. Scenery payloads retain their 2 MiB
+limits, and profiles retain the 10,000-point limit. Route serialization and size
+validation run before imagery preparation and chunk generation. The earlier
+2 MiB synthetic-route validation below describes the previous budget.
+
+Validation: workspace Rust and all 90 Python tests passed, including the 8 MiB
+route boundary, unchanged scenery/point caps, ZIP round-trip and saved activity
+export above 2 MiB. The real OC preview built at 153.490 km with 9,285 points in
+2,639,856 route bytes and 1,413 chunks; saved road choices were unchanged. The
+exported app completed offline traversal with at most nine live and three cached
+chunks, and its software power demonstration passed. Grades above 15% were retained
+explicitly for this unvalidated preview; this is not hardware or GPU acceptance.
+
 Preview readiness follow-up: Preview now explains road/scenery blockers and shows
 remaining topography coverage. With road review complete, its build action resumes
 terrain acquisition and queues the build using the existing cancellation/error

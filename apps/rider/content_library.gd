@@ -172,7 +172,8 @@ static func validate(path:String) -> Dictionary:
 		seen[entry.path]=true;payloads.append(entry)
 	for entry in payloads:
 		var size:Variant=entry.get("bytes")
-		if not (size is float or size is int) or size<=0 or size>(16*1024*1024 if entry.path=="imagery.png" else 2*1024*1024):return {"error":"Invalid payload size"}
+		var limit:=8*1024*1024 if entry.path=="route.json" else (16*1024*1024 if entry.path=="imagery.png" else 2*1024*1024)
+		if not (size is float or size is int) or size<=0 or size>limit:return {"error":"Invalid payload size"}
 		if not entry.get("sha256") is String or entry.sha256.length()!=64:return {"error":"Missing payload checksum"}
 		var payload:=FileAccess.open(path.path_join(entry.path),FileAccess.READ)
 		if payload==null or payload.get_length()!=size:return {"error":"Missing/incomplete payload: "+entry.path}

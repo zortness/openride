@@ -742,6 +742,15 @@ pub fn build(
         let points = profile(&current, frame, accept_steep)?;
         (frame, points)
     };
+    // Reject an oversized route before preparing imagery or generating any chunks.
+    let route=serde_json::to_vec(&json!({"points":points,"mode":"gps","validated":false,"projection":{"kind":"spherical_orthographic","radius_m":R,"origin":frame.origin}})).unwrap();
+    if route.len() > ride_core::MAX_ROUTE_PROFILE_BYTES {
+        return Err(bad(format!(
+            "Canonical route exceeds 8 MiB ({} bytes, {} points)",
+            route.len(),
+            points.len()
+        )));
+    }
     let course_raw = serde_json::to_vec(course).unwrap();
     let course_hash = hash(&course_raw);
     let mut sources = BTreeMap::new();
@@ -958,7 +967,6 @@ pub fn build(
             );
         }
     }
-    let route=serde_json::to_vec(&json!({"points":points,"mode":"gps","validated":false,"projection":{"kind":"spherical_orthographic","radius_m":R,"origin":frame.origin}})).unwrap();
     let mut coarse = Mesh::default();
     let mut coarse_lookup = BTreeMap::new();
     for entry in &entries {
@@ -987,9 +995,6 @@ pub fn build(
     let coarse = serde_json::to_vec(&coarse).unwrap();
     if coarse.len() > 2 * 1024 * 1024 {
         return Err(bad("Coarse terrain exceeds 2 MiB"));
-    }
-    if route.len() > 2 * 1024 * 1024 {
-        return Err(bad("Canonical route exceeds 2 MiB"));
     }
     let provenance=serde_json::to_vec(&json!({"kind":"openride.terrain-provenance","schema_version":1,"source_revision":current.source_revision,"course_sha256":course_hash,"tiles":sources,"assembly":{"recipe":"native-continuous-v1","grid_m":GRID,"max_overlap_difference_m":geometry.terrain.max_overlap,"overlap_policy":"Edge-weighted feather bounded by local DEM range and 10 m cap","terrain_conformance":"Presentation only; bridge/tunnel/layer and stacked heights excluded","steep_segments_retained":accept_steep}})).unwrap();
     let mut manifest = json!({"kind":"openride.stream-preview","schema_version":1,"trainer_ready":false,"name":current.project.name,"tile_m":256,"neighborhood_radius_cells":1,"max_live_chunks":9,"triangle_overhang_bound_m":32,"review_status":"unvalidated-preview","chunks":entries,"origin_lat_lon_elevation":frame.origin,"attribution":plan.attribution,"presentation":{"terrain_corridor":true,"inner_m":18,"outer_m":30,"clearance_m":0.25}});

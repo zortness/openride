@@ -64,6 +64,41 @@ fn plain_zip_and_unpacked_folder_roundtrip_share_only_referenced_assets() {
     fs::write(source.join("chunk_0_0.json"), b"bad").unwrap();
     assert!(package::validate_input(&source).is_err());
 }
+
+#[test]
+fn larger_route_roundtrips_but_route_and_chunk_caps_remain_bounded() {
+    let w = fixture();
+    let source = w.0.join("Unpacked ride");
+    let update = |name: &str, size: usize| {
+        let mut raw = b"{}".to_vec();
+        raw.resize(size, b' ');
+        fs::write(source.join(name), &raw).unwrap();
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(source.join("manifest.json")).unwrap()).unwrap();
+        let entry = if name == "route.json" {
+            &mut manifest["route"]
+        } else {
+            &mut manifest["chunks"][0]
+        };
+        entry["bytes"] = json!(size);
+        entry["sha256"] = json!(format!("{:x}", Sha256::digest(&raw)));
+        fs::write(
+            source.join("manifest.json"),
+            serde_json::to_vec(&manifest).unwrap(),
+        )
+        .unwrap();
+    };
+    update("route.json", ride_core::MAX_ROUTE_PROFILE_BYTES);
+    let archive = w.0.join("large.zip");
+    package::pack(&source, &archive).unwrap();
+    assert!(package::validate_input(&archive).is_ok());
+    assert!(package::install(&archive, &w.0.join("cache")).is_ok());
+    update("route.json", ride_core::MAX_ROUTE_PROFILE_BYTES + 1);
+    assert!(package::validate(&source).is_err());
+    update("route.json", 3 * 1024 * 1024);
+    update("chunk_0_0.json", 2 * 1024 * 1024 + 1);
+    assert!(package::validate(&source).is_err());
+}
 fn zip_files(path: &std::path::Path, files: &[(String, Vec<u8>)]) {
     let mut writer = zip::ZipWriter::new(fs::File::create(path).unwrap());
     for (name, raw) in files {

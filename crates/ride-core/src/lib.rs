@@ -10,6 +10,8 @@ use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, path::Path};
 
 pub type Result<T> = std::result::Result<T, String>;
+/// Canonical runtime route JSON only; scenery payloads retain their own budgets.
+pub const MAX_ROUTE_PROFILE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_BYTES: u64 = 64 * 1024 * 1024;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

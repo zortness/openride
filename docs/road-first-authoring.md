@@ -83,6 +83,12 @@ the current road-first course once `roads.json` exists.
 
 ## Generated elevations and remaining limits
 
+Canonical `route.json` profiles have an 8 MiB budget, separate from the 2 MiB
+budget for individual scenery JSON payloads. The builder checks route size before
+generating scenery. The 10,000-point profile limit and existing chunk/mesh limits
+still apply; increasing the byte budget does not simplify or alter route geometry.
+Use matching current app and native tools when sharing these larger packages.
+
 Course heights sample verified terrain at road geometry stations no more than
 30 m apart and apply a local 30 m weighted smoothing window. Recorded elevations
 are reference annotations only. Mesh generation independently subdivides roads to

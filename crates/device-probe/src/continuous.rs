@@ -621,7 +621,7 @@ pub fn run(
         let mut bytes = Vec::new();
         std::fs::File::open(&path)
             .map_err(error)?
-            .take(2 * 1024 * 1024 + 1)
+            .take(ride_core::MAX_ROUTE_PROFILE_BYTES as u64 + 1)
             .read_to_end(&mut bytes)
             .map_err(error)?;
         let ride = ride_core::live::LiveRide::parse(&bytes).map_err(error)?;

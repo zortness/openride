@@ -1,5 +1,22 @@
 use ride_core::live::LiveRide;
 #[test]
+fn route_byte_budget_accepts_eight_mib_but_keeps_point_limit() {
+    let mut raw =
+        br#"{"points":[{"distance_m":0,"elevation_m":0},{"distance_m":1000,"elevation_m":0}]}"#
+            .to_vec();
+    raw.resize(ride_core::MAX_ROUTE_PROFILE_BYTES, b' ');
+    assert!(LiveRide::parse(&raw).is_ok());
+    raw.push(b' ');
+    assert!(LiveRide::parse(&raw).err().unwrap().contains("8 MiB"));
+    let points: Vec<_> = (0..10001)
+        .map(|i| serde_json::json!({"distance_m":i,"elevation_m":0}))
+        .collect();
+    assert!(
+        LiveRide::parse(&serde_json::to_vec(&serde_json::json!({"points":points})).unwrap())
+            .is_err()
+    );
+}
+#[test]
 fn fresh_power_moves_and_loss_requires_explicit_resume() {
     let mut ride = LiveRide::parse(
         br#"{"points":[{"distance_m":0,"elevation_m":0},{"distance_m":10000,"elevation_m":0}]}"#,

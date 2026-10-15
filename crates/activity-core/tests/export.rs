@@ -365,6 +365,9 @@ fn geographic_xml_exports_validate_origin_and_split_pauses() {
         {"position":[20.,0.,0.],"distance_m":20.,"elevation_m":120.,"break_before":false}
     ]}))
     .unwrap();
+    // A saved route larger than the former 2 MiB cap must remain exportable.
+    let mut profile = profile;
+    profile.resize(3 * 1024 * 1024, b' ');
     let manifest =
         serde_json::to_vec(&json!({"origin_lat_lon_elevation":[33.,-118.,100.]})).unwrap();
     let route_hash = format!("{:x}", Sha256::digest(&profile));

@@ -603,10 +603,11 @@ pub fn export_with_manifest(
     if let Some(config) = &activity.route_config {
         std::fs::File::open(source.with_file_name("route-profile.json"))
             .map_err(|e| format!("Missing saved route profile: {e}"))?
-            .take(2 * 1024 * 1024 + 1)
+            // Matches ride-core's canonical route budget; journal limits are separate.
+            .take(8 * 1024 * 1024 + 1)
             .read_to_end(&mut profile)
             .map_err(|e| e.to_string())?;
-        if profile.len() > 2 * 1024 * 1024
+        if profile.len() > 8 * 1024 * 1024
             || config["route_sha256"] != format!("{:x}", Sha256::digest(&profile))
         {
             return Err("Saved route profile hash mismatch".into());

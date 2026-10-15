@@ -293,7 +293,8 @@ func finish_failure() -> void:
 func checked_json(entry: Dictionary) -> Variant:
 	var path:=root_path.path_join(entry.path)
 	var file:=FileAccess.open(path,FileAccess.READ)
-	if file==null or file.get_length()>2*1024*1024 or file.get_length()!=entry.get("bytes"):
+	var limit:=8*1024*1024 if entry.path=="route.json" else 2*1024*1024
+	if file==null or file.get_length()>limit or file.get_length()!=entry.get("bytes"):
 		fail("Missing/oversized streaming payload: "+entry.path);return null
 	if FileAccess.get_sha256(path)!=entry.get("sha256"):
 		fail("Streaming checksum mismatch: "+entry.path);return null

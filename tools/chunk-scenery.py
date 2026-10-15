@@ -147,7 +147,7 @@ def build(source,destination,riding_surface=False,coastline_osm=None,buildings_o
         entries.append(dict(x=x,z=z,path=name,bytes=len(data),sha256=hashlib.sha256(data).hexdigest()))
     route=dict(points=profile['points'],mode=profile['mode'],validated=False)
     route_raw=json.dumps(route,separators=(',',':'),allow_nan=False).encode()
-    if len(route_raw)>2*1024*1024: raise ValueError('Route metadata exceeds 2 MiB')
+    if len(route_raw)>8*1024*1024: raise ValueError('Route metadata exceeds 8 MiB')
     files['route.json']=route_raw
     manifest=dict(kind='openride.stream-preview',schema_version=1,trainer_ready=False,name=p['name']+(' - detailed scenery' if detail_osm else ''),tile_m=tile,
         neighborhood_radius_cells=1,max_live_chunks=9,triangle_overhang_bound_m=32,

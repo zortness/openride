@@ -10,8 +10,8 @@ pub struct LiveRide {
 }
 impl LiveRide {
     pub fn parse(bytes: &[u8]) -> Result<Self, String> {
-        if bytes.len() > 2 * 1024 * 1024 {
-            return Err("Route profile exceeds 2 MiB".into());
+        if bytes.len() > crate::MAX_ROUTE_PROFILE_BYTES {
+            return Err("Route profile exceeds 8 MiB".into());
         }
         let value: Value = serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
         let points = value["points"]

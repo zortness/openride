@@ -15,8 +15,8 @@ impl RideSimulation {
         self.simulation = None;
         let result = (|| -> Result<Simulation, String> {
             let raw = profile_json.to_string();
-            if raw.len() > 2 * 1024 * 1024 {
-                return Err("Profile exceeds 2 MiB".into());
+            if raw.len() > ride_core::MAX_ROUTE_PROFILE_BYTES {
+                return Err("Profile exceeds 8 MiB".into());
             }
             let value: Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
             let points = value["points"].as_array().ok_or("Missing profile points")?;
@@ -81,8 +81,8 @@ impl RideReplay {
         let result = (|| -> Result<ride_core::replay::ReplayWorker, String> {
             use std::io::Read;
             let raw = profile_json.to_string();
-            if raw.len() > 2 * 1024 * 1024 {
-                return Err("Profile exceeds 2 MiB".into());
+            if raw.len() > ride_core::MAX_ROUTE_PROFILE_BYTES {
+                return Err("Profile exceeds 8 MiB".into());
             }
             let value: Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
             let profile = value["points"]

@@ -112,7 +112,9 @@ fn checked_with(mut read: impl FnMut(&str) -> Result<Vec<u8>>) -> Result<Report>
     )]);
     let mut total = raw.len() as u64;
     for (path, entry) in entries {
-        let limit = if path == "imagery.png" {
+        let limit = if path == "route.json" {
+            ride_core::MAX_ROUTE_PROFILE_BYTES as u64
+        } else if path == "imagery.png" {
             FILE_LIMIT
         } else if path.starts_with("imagery_") {
             128 * 1024
