@@ -500,6 +500,13 @@ struct Segment {
     elevated: bool,
     cut_only: bool,
 }
+fn stacked_height_conflict(near: &[(f64, f64)], nearest_distance: f64, nearest_y: f64) -> bool {
+    // Only similarly close road surfaces can be stacked at this terrain vertex.
+    // A steep road can change by more than 3 m within the 30 m corridor.
+    near.iter().any(|&(distance, y)| {
+        distance < 8. && distance <= nearest_distance + 2. && (y - nearest_y).abs() > 3.
+    })
+}
 struct Geometry<'a> {
     terrain: Terrain<'a>,
     segments: BTreeMap<(i32, i32), Vec<Segment>>,
@@ -524,15 +531,15 @@ impl Geometry<'_> {
                 let t = (((x - s.a[0]) * dx + (z - s.a[2]) * dz) / denom).clamp(0., 1.);
                 let distance = (x - s.a[0] - t * dx).hypot(z - s.a[2] - t * dz);
                 let y = s.a[1] + t * (s.b[1] - s.a[1]) - 0.25;
-                if distance < 30. {
-                    near.push(y);
+                if distance < 8. {
+                    near.push((distance, y));
                 }
                 if distance < found.0 {
                     found = (distance, y, !s.elevated, s.cut_only);
                 }
             }
         }
-        if near.iter().any(|y| (y - found.1).abs() > 3.) {
+        if stacked_height_conflict(&near, found.0, found.1) {
             found.2 = false;
         }
         found
@@ -1094,4 +1101,21 @@ pub fn export(root: &Path, revision: &str, cancel: Option<&Path>) -> Result<Snap
         &serde_json::to_vec_pretty(&build).unwrap(),
     )?;
     open(root)
+}
+
+#[cfg(test)]
+mod clearance_tests {
+    use super::stacked_height_conflict;
+
+    #[test]
+    fn steep_road_neighbors_do_not_disable_terrain_clearance() {
+        let nearby = [(1.6, 44.9), (4.4, 45.6), (13.7, 42.5), (21.9, 47.0)];
+        assert!(!stacked_height_conflict(&nearby, 1.6, 44.9));
+    }
+
+    #[test]
+    fn overlapping_road_surfaces_still_disable_terrain_clearance() {
+        let nearby = [(1.6, 44.9), (2.1, 49.0)];
+        assert!(stacked_height_conflict(&nearby, 1.6, 44.9));
+    }
 }

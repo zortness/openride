@@ -626,7 +626,7 @@ where
     }
     refresh(root, &mut plan);
     if scenery_layer {
-        crate::scenery::refresh_catalog(root, &plan, cancel)?;
+        crate::scenery::refresh_catalog(root, &plan, &current, cancel)?;
     }
     if layer == "streets" {
         let graph = street_graph(root, &plan, cancel)?;

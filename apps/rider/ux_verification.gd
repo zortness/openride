@@ -17,15 +17,39 @@ func run(app: Node) -> void:
 		if arg.begins_with("--ux-worker="): worker = arg.trim_prefix("--ux-worker=")
 	await app.get_tree().process_frame
 	var button: Button = app.get_viewport().gui_get_focus_owner()
-	if not check(button!=null and button.text.begins_with("Ride"),"Home initial focus",app): return
+	if not check(button==shell.tab_buttons[0] and shell.tab_buttons[0].button_pressed,"Home initial focus and selected tab",app): return
+	if not check(app.get_tree().root.title=="OpenRide","Windows title",app): return
+	var replay: Control = shell.pages.Home.get_child(0)
+	await app.get_tree().create_timer(0.12).timeout
+	if not check(float(replay.get("progress_m"))>0.0,"Home ride replay moves",app): return
+	var mode_button: Button = shell.header.get_child(shell.header.get_child_count()-1)
+	if not check(mode_button.text.is_empty() and mode_button.custom_minimum_size.x<=48,"Compact window-mode icon",app): return
+	shell.tab_buttons[1].grab_focus()
 	var accept := InputEventJoypadButton.new(); accept.button_index=JOY_BUTTON_A; accept.pressed=true
 	Input.parse_input_event(accept.duplicate()); await app.get_tree().process_frame
 	accept.pressed=false; Input.parse_input_event(accept.duplicate()); await app.get_tree().process_frame
 	if not check(shell.stack[-1]==shell.pages.Ride,"Controller confirm route screen",app): return
+	if not check(shell.tab_buttons[1].button_pressed and not shell.tab_buttons[0].button_pressed,"Ride outline updates on first activation",app): return
+	if not check(replay.get("viewport").render_target_update_mode==SubViewport.UPDATE_DISABLED,"Hidden Home replay stops rendering",app): return
 	var back_event := InputEventJoypadButton.new(); back_event.button_index=JOY_BUTTON_B; back_event.pressed=true
 	Input.parse_input_event(back_event.duplicate()); await app.get_tree().process_frame
 	back_event.pressed=false; Input.parse_input_event(back_event.duplicate())
 	if not check(shell.stack[-1]==shell.pages.Home,"Controller Back home",app): return
+	if not check(shell.tab_buttons[0].button_pressed and not shell.tab_buttons[1].button_pressed,"Home outline follows navigation",app): return
+	shell.tab_buttons[2].pressed.emit()
+	if not check(shell.stack[-1]==shell.pages.Create and shell.tab_buttons[2].button_pressed and not shell.tab_buttons[0].button_pressed,"Create outline follows one tab press",app): return
+	shell.tab_buttons[0].pressed.emit()
+	if not check(shell.stack[-1]==shell.pages.Home and shell.tab_buttons[0].button_pressed and not shell.tab_buttons[2].button_pressed,"Home outline follows one tab press",app): return
+	var back_button: Button = shell.header.get_child(0)
+	back_button.pressed.emit()
+	if not check(not shell.has_dialog(),"First Home Back arms exit",app): return
+	back_button.pressed.emit()
+	var exit_dialog: ConfirmationDialog
+	for window in app.get_tree().root.find_children("*","ConfirmationDialog",true,false):
+		if window.visible and window.dialog_text=="Are you sure you want to exit?": exit_dialog=window; break
+	if not check(exit_dialog!=null and exit_dialog.ok_button_text=="Yes" and exit_dialog.get_cancel_button().text=="No","Second Home Back confirms exit",app): return
+	exit_dialog.hide(); exit_dialog.queue_free()
+	await app.get_tree().process_frame
 	shell.axis=Vector2(0,1); shell.gamepad=true
 	Input.joy_connection_changed.emit(0,false)
 	if not check(shell.axis==Vector2.ZERO and not shell.gamepad and shell.stack[-1]==shell.pages.Home,"Disconnect clears held navigation without leaving screen",app): return
@@ -167,4 +191,10 @@ func run(app: Node) -> void:
 		shell.navigate(shell.history,true)
 		while shell.history.file!=null or not shell.history.queue.is_empty(): await app.get_tree().process_frame
 		await app._snapshot(snapshot); return
-	app.get_tree().quit()
+	shell.navigate(shell.pages.Home,true)
+	shell.back(); shell.back()
+	for window in app.get_tree().root.find_children("*","ConfirmationDialog",true,false):
+		if window.visible and window.dialog_text=="Are you sure you want to exit?":
+			window.get_ok_button().pressed.emit()
+			return
+	check(false,"Home Yes exit dialog remained unavailable",app)

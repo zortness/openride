@@ -1,5 +1,57 @@
 # M7 progress
 
+## Home and shell UX — 2026-10-15
+
+Home now contains only the app name, source/build version and UTC build date over a
+looping fictional coastal ride. The camera follows a curving road past low-rise
+buildings and trees, with a beach and sea to one side. The scene uses generated
+geometry, no personal route or network data, and stops rendering while Home is
+hidden. Release builds generate and pack the version/date metadata. The executable
+window title is `OpenRide`.
+
+Back, Home, Ride, Create, Activities, Settings and a compact window-mode icon share
+the top row. The active section has a persistent selected outline after one tab
+press, including nested screens; the redundant per-screen caption is removed. On
+Home, two Back presses open the exact Yes/No exit confirmation. A fresh exported
+Windows build passed the UX regression covering replay motion, title, icon size,
+single-press tab selection, two-press exit dialog, Yes-button exit and rendering suspension. A
+rendered Home capture is at `local/home-preview.png` for review.
+The owner noticed lane-line flicker during motion. All markings had been coplanar
+with the road mesh; they now sit 6 cm above it, with wider lines and 4× MSAA in
+the Home viewport. The rebuilt exported app passed the UX check and a fresh
+rendered Home capture with no script errors. Motion appearance still benefits from
+owner review on the display used for riding.
+
+## Automatic scenery follow-up — 2026-10-15
+
+The owner expected buildings and vegetation to arrive automatically and found the
+polygon editor misleading. The current native pipeline downloads OSM building
+footprints and mapped woodland, scrub, heath and forest areas, then plants
+deterministic trees and shrubs in those areas. Legacy vegetation also used mapped
+land cover; satellite imagery currently supplies ground color and does not classify
+plants. Manual polygons are corrections for missing or inaccurate map features.
+
+The real OC project had all 112 building source tiles cached but no scenery catalog:
+catalog assembly hit the 20,000-feature limit because it included off-route
+buildings. Catalog generation now retains features near the saved ride corridor and
+preserves edited source identities. It recovered 19,550 building footprints in a
+10.1 MiB catalog; the bounded feature limit was raised to 30,000 while the 16 MiB
+read limit stays in place. The saved course rebuilt with building meshes in 855 of
+1,413 chunks (450,258 building triangles); a rendered snapshot near 1 km shows
+them. The 247 road choices and accepted connection are unchanged. The current
+project build is `3af35d0f8c03e4e927723277c7761e52224e761a3a3058375babea828e1bf294`.
+The ZIP already in `dist/content/` is the earlier corrected terrain package; it
+does not include these buildings.
+
+Scenery & share now offers one primary resumable action for mapped buildings and
+vegetation, reports layer tile coverage and feature counts, and places polygon
+editing and individual-layer downloads under Advanced. The exported Windows app
+and its synthetic scenery workflow pass. One live vegetation tile was downloaded
+for the real project, but it contained no route-near vegetation: vegetation
+coverage is 1/112 and the current build has zero plant instances. Full-route
+vegetation acquisition, rebuild/export and visual review remain open. Satellite
+vegetation classification is not implemented.
+
 ## Road-first refactor — 2026-10-13
 
 Long-route payload follow-up: canonical route JSON now permits 8 MiB across native
@@ -16,6 +68,28 @@ export above 2 MiB. The real OC preview built at 153.490 km with 9,285 points in
 exported app completed offline traversal with at most nine live and three cached
 chunks, and its software power demonstration passed. Grades above 15% were retained
 explicitly for this unvalidated preview; this is not hardware or GPU acceptance.
+
+2026-10-15 owner check: the real road-first ride exported as a ZIP, was placed in
+`dist/content/`, and opened for preview through the main Ride menu. This confirms
+the user-facing export, local content discovery and preview entry path for this
+package. Visual terrain, road and grade review is still pending.
+
+Long-route inspection follow-up: the owner saw no issue in a quick preview, so a
+direct-distance screenshot option (`--snapshot-distance-m` with `--snapshot`) was
+added for targeted, bounded rendered checks. Twelve stations spanning the route
+found buried camera/road geometry near 107.6 km, at the only two profile grades
+above 15%. Terrain conformance had treated heights anywhere within the 30 m road
+corridor as stacked surfaces; the steep road's own nearby stations triggered that
+exclusion. Stacked-surface detection now compares only similarly close surfaces.
+The saved choices, route geometry and terrain-derived grade profile were unchanged.
+The rebuilt package regenerated 26 chunks; a compiled-mesh scan found zero camera
+intrusions across 9,285 route points, versus one at 107,612.8 m in the prior
+package. Rendered images at 107.60–107.64 km show the road and camera clear, and
+the new package completed a 153.490 km offline traversal with nine live and three
+cached chunks at peak. The corrected ZIP is installed in `dist/content/`; the
+previous ZIP is retained under `local/content-backups/`. The steep grades remain
+unvalidated for trainer use. Sparse snapshots and mesh clearance do not establish
+complete visual, bridge, GPU or hardware acceptance.
 
 Preview readiness follow-up: Preview now explains road/scenery blockers and shows
 remaining topography coverage. With road review complete, its build action resumes

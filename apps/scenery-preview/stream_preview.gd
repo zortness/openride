@@ -163,13 +163,18 @@ func _ready() -> void:
 	completion_panel.hide()
 	var snapshot:=""
 	var snapshot_fraction:=0.5
+	var snapshot_distance_text:=""
+	var snapshot_distance_requested:=false
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--benchmark-seconds="):benchmark_seconds=clampf(float(arg.trim_prefix("--benchmark-seconds=")),1,300)
 		if arg.begins_with("--stream-package="):root_path=arg.trim_prefix("--stream-package=")
 		if arg.begins_with("--snapshot-fraction="):snapshot_fraction=clampf(float(arg.trim_prefix("--snapshot-fraction=")),0,1)
+		if arg.begins_with("--snapshot-distance-m="):
+			snapshot_distance_requested=true
+			snapshot_distance_text=arg.trim_prefix("--snapshot-distance-m=")
 		if arg.begins_with("--look-degrees="):view_yaw=deg_to_rad(float(arg.trim_prefix("--look-degrees=")))
 		if arg.begins_with("--snapshot="):snapshot=arg.trim_prefix("--snapshot=")
-	automatic=OS.get_cmdline_user_args().has("--verify-stream") or not snapshot.is_empty() or benchmark_seconds>0
+	automatic=OS.get_cmdline_user_args().has("--verify-stream") or not snapshot.is_empty() or snapshot_distance_requested or benchmark_seconds>0
 	if not load_package():return
 	if riding_view:
 		preload("res://route_detail.gd").markers(self,traversal.points,road_metadata)
@@ -240,6 +245,23 @@ func _ready() -> void:
 		get_tree().quit();return
 	if benchmark_seconds>0:
 		await benchmark(benchmark_seconds)
+		return
+	if snapshot_distance_requested:
+		if snapshot.is_empty() or not snapshot_distance_text.is_valid_float():
+			fail("Snapshot distance needs --snapshot and a numeric distance");return
+		var snapshot_distance:=float(snapshot_distance_text)
+		if not is_finite(snapshot_distance) or snapshot_distance<0 or snapshot_distance>traversal.length_m:
+			fail("Snapshot distance is outside this route");return
+		seek(snapshot_distance)
+		if not await wait_for_neighborhood():return
+		for frame in range(4):await get_tree().process_frame
+		if riding_view and (absf(camera.position.y-target.y-1.65)>0.001 or not camera.transform.is_finite()):
+			fail("Invalid riding camera pose");return
+		await RenderingServer.frame_post_draw
+		if get_viewport().get_texture().get_image().save_png(snapshot)!=OK:
+			fail("Screenshot failed");return
+		print("SNAPSHOT_DISTANCE_OK distance_m=",snapshot_distance," loaded_chunks=",live.size())
+		get_tree().quit()
 		return
 	if automatic:
 		# Offline traversal checks need every station and load/unload transition,

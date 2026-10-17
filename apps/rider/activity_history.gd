@@ -28,6 +28,9 @@ func refresh() -> void:
 	if file != null: file.close(); file = null
 	entries.clear(); queue.clear(); listing.clear(); export_button.disabled = true
 	chart.samples = []; chart.queue_redraw()
+	if not DirAccess.dir_exists_absolute(directory):
+		summary.text = "No recordings yet."
+		return
 	var folders := DirAccess.get_directories_at(directory); folders.sort(); folders.reverse()
 	for folder in folders:
 		var path := directory.path_join(folder).path_join("session.jsonl")

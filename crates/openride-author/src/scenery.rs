@@ -491,7 +491,102 @@ pub fn catalog(graph: &Graph) -> Catalog {
     }
     out
 }
-pub fn refresh_catalog(root: &Path, plan: &maps::Plan, cancel: Option<&Path>) -> Result<()> {
+struct Corridor {
+    origin: [f64; 3],
+    points: BTreeMap<(i32, i32), Vec<[f64; 2]>>,
+}
+impl Corridor {
+    fn new(origin: [f64; 3]) -> Self {
+        Self {
+            origin,
+            points: BTreeMap::new(),
+        }
+    }
+    fn xy(&self, p: [f64; 2]) -> [f64; 2] {
+        [
+            (p[1] - self.origin[1]) * 111195. * self.origin[0].to_radians().cos(),
+            (p[0] - self.origin[0]) * 111195.,
+        ]
+    }
+    fn add(&mut self, p: [f64; 2]) {
+        self.points
+            .entry(((p[0] / 256.).floor() as i32, (p[1] / 256.).floor() as i32))
+            .or_default()
+            .push(p);
+    }
+    fn segment(&mut self, a: [f64; 2], b: [f64; 2]) {
+        let n = ((a[0] - b[0]).hypot(a[1] - b[1]) / 50.).ceil().max(1.) as usize;
+        for i in 0..=n {
+            let t = i as f64 / n as f64;
+            self.add([a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])]);
+        }
+    }
+    fn from_snapshot(snapshot: &Snapshot, plan: &maps::Plan) -> Self {
+        let mut corridor = Self::new(plan.origin);
+        if let Some(course) = &snapshot.course {
+            for section in &course.sections {
+                for p in &section.geometry {
+                    corridor.add(corridor.xy(*p));
+                }
+                for pair in section.geometry.windows(2) {
+                    corridor.segment(corridor.xy(pair[0]), corridor.xy(pair[1]));
+                }
+            }
+        } else if let Some(preview) = &snapshot.repair_preview {
+            let mut previous = None;
+            for sample in &preview.samples {
+                if let (Some(lat), Some(lon)) = (sample.latitude, sample.longitude) {
+                    let p = corridor.xy([lat, lon]);
+                    if let Some(a) = previous.filter(|_| !sample.break_before) {
+                        corridor.segment(a, p);
+                    } else {
+                        corridor.add(p);
+                    }
+                    previous = Some(p);
+                } else {
+                    previous = None;
+                }
+            }
+        }
+        corridor
+    }
+    fn includes(&self, feature: &Feature) -> bool {
+        let mut min = [f64::INFINITY; 2];
+        let mut max = [f64::NEG_INFINITY; 2];
+        for p in &feature.outer {
+            let p = self.xy(*p);
+            for axis in 0..2 {
+                min[axis] = min[axis].min(p[axis]);
+                max[axis] = max[axis].max(p[axis]);
+            }
+        }
+        if !min[0].is_finite() {
+            return false;
+        }
+        const R: f64 = 150.;
+        for x in ((min[0] - R) / 256.).floor() as i32..=((max[0] + R) / 256.).floor() as i32 {
+            for z in ((min[1] - R) / 256.).floor() as i32..=((max[1] + R) / 256.).floor() as i32 {
+                if self.points.get(&(x, z)).is_some_and(|points| {
+                    points.iter().any(|p| {
+                        p[0] >= min[0] - R
+                            && p[0] <= max[0] + R
+                            && p[1] >= min[1] - R
+                            && p[1] <= max[1] + R
+                    })
+                }) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+}
+pub fn refresh_catalog(
+    root: &Path,
+    plan: &maps::Plan,
+    snapshot: &Snapshot,
+    cancel: Option<&Path>,
+) -> Result<()> {
     let mut graph = Graph::default();
     for tile in &plan.tiles {
         for layer in ["buildings", "vegetation", "water"] {
@@ -527,11 +622,19 @@ pub fn refresh_catalog(root: &Path, plan: &maps::Plan, cancel: Option<&Path>) ->
     for f in coast {
         catalog.features.insert(f.id.clone(), f);
     }
+    let corridor = Corridor::from_snapshot(snapshot, plan);
+    if corridor.points.is_empty() {
+        return Err(bad("Scenery needs a located ride corridor"));
+    }
+    let pinned = book(root)?.overrides.into_keys().collect::<BTreeSet<_>>();
+    catalog
+        .features
+        .retain(|id, feature| pinned.contains(id) || corridor.includes(feature));
     catalog.warnings.extend(warnings);
     catalog.warnings.truncate(1000);
     let raw = serde_json::to_vec(&catalog).unwrap();
-    if catalog.features.len() > 20000 || raw.len() > 16 * 1024 * 1024 {
-        return Err(bad("Scenery catalog exceeds 20,000 features / 16 MiB"));
+    if catalog.features.len() > 30000 || raw.len() > 16 * 1024 * 1024 {
+        return Err(bad("Scenery catalog exceeds 30,000 features / 16 MiB"));
     }
     fs::create_dir_all(root.join("maps").join(&plan.key))?;
     maps::atomic_file(
@@ -541,4 +644,42 @@ pub fn refresh_catalog(root: &Path, plan: &maps::Plan, cancel: Option<&Path>) ->
             .join("scenery-catalog.json"),
         &raw,
     )
+}
+
+#[cfg(test)]
+mod corridor_tests {
+    use super::{Corridor, Feature};
+
+    fn polygon(id: &str, west: f64, east: f64) -> Feature {
+        Feature {
+            id: id.into(),
+            kind: "building".into(),
+            outer: vec![
+                [-0.0001, west],
+                [-0.0001, east],
+                [0.0001, east],
+                [0.0001, west],
+            ],
+            holes: vec![],
+            height_m: None,
+            elevation_m: None,
+            density: 0.35,
+            trees: false,
+            hidden: false,
+            provenance: String::new(),
+        }
+    }
+
+    #[test]
+    fn scenery_catalog_uses_the_ride_corridor_including_long_segments() {
+        let mut corridor = Corridor::new([0., 0., 0.]);
+        corridor.segment([0., 0.], [1000., 0.]);
+        assert!(corridor.includes(&polygon("near", 0.004, 0.0041)));
+        let mut far = polygon("far", 0.004, 0.0041);
+        for p in &mut far.outer {
+            p[0] += 0.01;
+        }
+        assert!(!corridor.includes(&far));
+        assert!(corridor.includes(&polygon("large", -0.01, 0.01)));
+    }
 }

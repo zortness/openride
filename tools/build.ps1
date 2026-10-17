@@ -15,6 +15,18 @@ try {
     Copy-Item -LiteralPath "target/$profile/device-probe.exe" -Destination apps/rider/bin/device-probe.exe
     Copy-Item -LiteralPath "target/$profile/content-builder.exe" -Destination apps/rider/bin/content-builder.exe
     Copy-Item -LiteralPath "target/$profile/openride-author.exe" -Destination apps/rider/bin/openride-author.exe
+    $versionMatch = Select-String -Path apps/rider/project.godot -Pattern '^config/version="([^"]+)"$'
+    if (-not $versionMatch) { throw 'Missing OpenRide application version' }
+    $baseVersion = $versionMatch.Matches[0].Groups[1].Value
+    $revision = (& git rev-parse --short=8 HEAD).Trim()
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot read source revision for build metadata' }
+    $dirty = @(& git status --porcelain --untracked-files=normal).Count -gt 0
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot read source state for build metadata' }
+    $buildInfo = @{
+        version = "$baseVersion+$revision$(if ($dirty) { '.dev' })"
+        built_utc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm "UTC"', [Globalization.CultureInfo]::InvariantCulture)
+    } | ConvertTo-Json -Compress
+    [IO.File]::WriteAllText((Join-Path $projectRoot 'apps/rider/bin/build-info.json'), $buildInfo, [Text.UTF8Encoding]::new($false))
     New-Item -ItemType Directory -Force -Path local | Out-Null
     $godotExecutable = (Get-Command $Godot -ErrorAction Stop).Source
     $process = Start-Process -FilePath $godotExecutable -ArgumentList @('--headless', '--path', 'apps/rider', '--editor', '--import') -WorkingDirectory $projectRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput "$projectRoot/local/build-godot.stdout.log" -RedirectStandardError "$projectRoot/local/build-godot.stderr.log"

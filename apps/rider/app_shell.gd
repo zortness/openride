@@ -6,7 +6,6 @@ var app: Control
 var body: Control
 var header: HBoxContainer
 var tabs: HBoxContainer
-var caption: Label
 var hints: Label
 var pages := {}
 var stack: Array[Control] = []
@@ -23,11 +22,10 @@ var gamepad := false
 var axis := Vector2.ZERO
 var next_repeat := 0
 var active_world: Control
-var recent_activities: VBoxContainer
-var recent_count := -1
 var tab_buttons: Array[Button] = []
 var ride_shade: ColorRect
-var recent_routes: VBoxContainer
+var current_section := "Home"
+var home_back_armed := false
 var ride_inputs := preload("res://ride_inputs.gd").new()
 
 func configure(owner_app: Control, inspector: Control) -> void:
@@ -49,13 +47,15 @@ func configure(owner_app: Control, inspector: Control) -> void:
 	var margin := MarginContainer.new(); margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); add_child(margin)
 	for side in ["left","right","top","bottom"]: margin.add_theme_constant_override("margin_"+side,20)
 	var layout := VBoxContainer.new(); layout.add_theme_constant_override("separation",14); margin.add_child(layout)
-	header = HBoxContainer.new(); layout.add_child(header)
-	var back_button := button(header,"‹ Back",back); back_button.custom_minimum_size.x = 110
-	caption = Label.new(); caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL; caption.add_theme_font_size_override("font_size",24); header.add_child(caption)
-	button(header,"Window / fullscreen",func(): DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN else DisplayServer.WINDOW_MODE_FULLSCREEN))
-	tabs = HBoxContainer.new(); layout.add_child(tabs)
+	header = HBoxContainer.new(); header.add_theme_constant_override("separation",8); layout.add_child(header)
+	var back_button := button(header,"‹ Back",back); back_button.custom_minimum_size.x = 92
+	tabs = HBoxContainer.new(); tabs.size_flags_horizontal=Control.SIZE_EXPAND_FILL; tabs.add_theme_constant_override("separation",6); header.add_child(tabs)
 	for name in ["Home","Ride","Create","Activities","Settings"]:
 		var tab := button(tabs,name,func(): navigate(pages[name],true)); tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL; tab.toggle_mode = true; tab_buttons.append(tab)
+		var selected := StyleBoxFlat.new(); selected.bg_color=Color("23505a"); selected.border_color=Color("65dfd0"); selected.set_border_width_all(2); selected.set_corner_radius_all(6)
+		selected.content_margin_left=16; selected.content_margin_right=16; selected.content_margin_top=12; selected.content_margin_bottom=12
+		tab.add_theme_stylebox_override("pressed",selected); tab.add_theme_stylebox_override("hover_pressed",selected)
+	header.add_child(preload("res://window_mode_button.gd").new())
 	body = Control.new(); body.size_flags_vertical = Control.SIZE_EXPAND_FILL; layout.add_child(body)
 	hints = Label.new(); hints.text = "Arrow keys / Tab: move   Enter: select   Esc: back"; layout.add_child(hints)
 	register(inspector,"Inspect source")
@@ -76,18 +76,16 @@ func configure(owner_app: Control, inspector: Control) -> void:
 	register(app.device_monitor,"Device diagnostics")
 	history = preload("res://activity_history.gd").new(); register(history,"Activities"); pages.Activities = history
 	history.export_requested.connect(func(path: String): app.activity_export.select_session(path); navigate(app.activity_export))
-	var home := page("Home"); pages.Home = home
-	label(home,"OPENRIDE  /  Your next ride",36)
-	label(home,"Local routes. Your trainer. Your pace.",20)
-	var cards := HBoxContainer.new(); cards.add_theme_constant_override("separation",16); home.add_child(cards)
-	for entry in [["Ride\nChoose an installed route",pages.Ride],["Create\nBuild or continue a route",pages.Create],["Activities\nReview your recordings",history]]:
-		var card := button(cards,entry[0],func(): navigate(entry[1],true)); card.custom_minimum_size.y = 110; card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var home := Control.new(); register(home,"Home"); pages.Home = home
+	home.add_child(preload("res://home_replay.gd").new())
+	var plaque := PanelContainer.new(); plaque.anchor_top=1.0; plaque.anchor_bottom=1.0; plaque.offset_left=38; plaque.offset_right=440; plaque.offset_top=-169; plaque.offset_bottom=-30; plaque.mouse_filter=Control.MOUSE_FILTER_IGNORE; home.add_child(plaque)
+	var plaque_style := StyleBoxFlat.new(); plaque_style.bg_color=Color(0.055,0.12,0.15,0.82); plaque_style.set_corner_radius_all(8); plaque_style.set_content_margin_all(18); plaque.add_theme_stylebox_override("panel",plaque_style)
+	var identity := VBoxContainer.new(); identity.add_theme_constant_override("separation",3); plaque.add_child(identity)
+	label(identity,"OpenRide",43)
+	var build_info := home_build_info()
+	label(identity,"Version " + str(build_info.get("version","0.1.0")),17)
+	label(identity,"Built " + str(build_info.get("built_utc","development")),15)
 	app.content_library.refresh()
-	label(home,"Installed routes",20)
-	recent_routes=VBoxContainer.new(); home.add_child(recent_routes)
-	app.content_library.refreshed.connect(refresh_routes); refresh_routes()
-	label(home,"Recent recordings",20)
-	recent_activities = VBoxContainer.new(); home.add_child(recent_activities)
 	var settings := page("Settings"); pages.Settings = settings
 	label(settings,"Devices and tools",30)
 	label(settings,"Connect your trainer and optional heart-rate source from the ride setup screen.",18)
@@ -125,6 +123,12 @@ func configure(owner_app: Control, inspector: Control) -> void:
 func label(parent: Node, text: String, size_px := 18) -> Label:
 	var value := Label.new(); value.text = text; value.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; value.add_theme_font_size_override("font_size",size_px); parent.add_child(value); return value
 
+func home_build_info() -> Dictionary:
+	var path := "res://bin/build-info.json"
+	if not FileAccess.file_exists(path): return {}
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string(path))
+	return parsed if parsed is Dictionary else {}
+
 func button(parent: Node, text: String, callback: Callable) -> Button:
 	var value := Button.new(); value.text = text; value.custom_minimum_size.y = 46; value.pressed.connect(callback); parent.add_child(value); return value
 
@@ -155,14 +159,19 @@ func navigate(screen: Control, top := false) -> void:
 	stack = stack.filter(func(s): return is_instance_valid(s))
 	if stack.is_empty() or stack[-1]!=screen: stack.append(screen)
 	screen.show(); switching = false
-	caption.text = str(screen.get_meta("screen_title","OpenRide"))
-	for tab in tab_buttons: tab.set_pressed_no_signal(pages[tab.text]==screen)
+	for tab in tab_buttons:
+		if pages[tab.text]==screen: current_section=tab.text
+	for tab in tab_buttons:
+		tab.set_pressed_no_signal(tab.text==current_section)
 	tabs.visible = not (screen is WorldScreen and screen.training)
+	hints.visible = screen != pages.Home
+	if screen != pages.Home or top: home_back_armed=false
 	if screen==history: history.refresh()
 	if screen==app.route_workflow: app.route_workflow.library_directory = app.content_library.directory
 	focus_screen.call_deferred(screen)
 
 func focus_screen(screen: Control) -> void:
+	if screen==pages.Home: tab_buttons[0].grab_focus(); return
 	var previous: Variant = focused.get(screen)
 	if is_instance_valid(previous) and previous is Control and previous.is_visible_in_tree(): previous.grab_focus(); return
 	if screen is WorldScreen: screen.focus_first(); return
@@ -170,23 +179,30 @@ func focus_screen(screen: Control) -> void:
 	for node in screen.find_children("*","Control",true,false):
 		if node.is_visible_in_tree() and node.focus_mode==Control.FOCUS_ALL and not (node is BaseButton and node.disabled): node.grab_focus(); return
 
-func refresh_routes() -> void:
-	for child in recent_routes.get_children(): child.queue_free()
-	var shown := 0
-	for entry in app.content_library.entries:
-		if entry.has("error"): continue
-		button(recent_routes,entry.name,func(): app._open_scenery(entry.path,true)); shown+=1
-		if shown>=3: break
-	if shown==0: label(recent_routes,"No routes installed yet. Create a route or choose a folder in Ride.",16)
-
 func back() -> void:
 	if stack.is_empty(): return
 	var current: Control = stack[-1]
 	if current is WorldScreen and current.active_ride(): show_ride_menu(); return
 	if ride_menu.visible: ride_menu.hide(); return
 	stack = stack.filter(func(s): return is_instance_valid(s))
-	if stack.size()<2: navigate(pages.Home,true); return
+	if stack.size()<2:
+		if current==pages.Home:
+			if home_back_armed: request_home_exit()
+			else: home_back_armed=true
+		else: navigate(pages.Home,true)
+		return
 	stack.pop_back(); var target: Control = stack.pop_back(); navigate(target)
+
+func request_home_exit() -> void:
+	home_back_armed=false
+	var confirm := ConfirmationDialog.new()
+	confirm.dialog_text="Are you sure you want to exit?"
+	confirm.ok_button_text="Yes"
+	add_child(confirm)
+	confirm.get_cancel_button().text="No"
+	confirm.confirmed.connect(func():get_tree().quit())
+	confirm.canceled.connect(confirm.queue_free)
+	confirm.popup_centered()
 
 func show_world(screen: Control) -> void:
 	if screen.training: active_world = screen
@@ -308,12 +324,6 @@ func _process(_delta: float) -> void:
 		if not stack.is_empty() and stack[-1] is WorldScreen and not ride_menu.visible: stack[-1].viewport.push_input(key)
 		else: get_viewport().push_input(key)
 		gamepad = true
-	if history!=null and recent_activities!=null and history.entries.size()!=recent_count:
-		recent_count = history.entries.size()
-		for child in recent_activities.get_children(): child.queue_free()
-		for entry in history.entries.slice(0,3):
-			var stamp := Time.get_datetime_string_from_unix_time(int(entry.utc)).replace("T"," ")+" UTC"
-			button(recent_activities,"%s · %.1f km · %s" % [stamp,entry.distance/1000,"Finished" if entry.complete else "Incomplete"],func(): history.selected_path=entry.path; navigate(history,true))
 	if ride_menu.visible and is_instance_valid(active_world) and active_world.content.live_ride!=null:
 		var ride = active_world.content.live_ride
 		menu_status.text = ride.note

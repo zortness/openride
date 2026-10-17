@@ -8,6 +8,7 @@ var worker: Thread
 var busy := false
 var pending_path := ""
 var pending_action := ""
+var pending_layer := ""
 var cancel_path := ""
 var project_name: LineEdit
 var overview: Label
@@ -115,6 +116,7 @@ func run_job(action: String, path: String, extra := PackedStringArray()) -> void
 		job_queue.clear();feedback.text = "Native authoring tool is missing. Rebuild or reinstall OpenRide."; return
 	pending_path = path
 	pending_action = action
+	pending_layer = str(extra[extra.find("--layer") + 1]) if action == "acquire" and extra.find("--layer") >= 0 and extra.find("--layer") + 1 < extra.size() else ""
 	cancel_path = ProjectSettings.globalize_path("user://author-cancel-%s-%s" % [OS.get_process_id(), Time.get_ticks_usec()])
 	var args := PackedStringArray(["project", action, path, "--cancel-file", cancel_path])
 	if action in ["create", "rename"]: args.append_array(["--name", project_name.text])
@@ -124,6 +126,7 @@ func run_job(action: String, path: String, extra := PackedStringArray()) -> void
 	if action == "import": feedback.text = "Importing and comparing complete recordings…"
 	if action == "build-package": feedback.text = "Building terrain and roads…"
 	if action == "infer-roads": feedback.text = "Following the recording through connected roads…"
+	if action == "acquire" and pending_layer in ["buildings", "vegetation", "water"]: feedback.text = "Downloading mapped %s…" % pending_layer
 	var tool := executable()
 	var error := worker.start(func():
 		var output: Array = []
@@ -157,7 +160,9 @@ func _process(delta: float) -> void:
 				var parser := JSON.new()
 				if parser.parse(file.get_as_text()) == OK and parser.data is Dictionary:
 					var plan: Dictionary = parser.data
-					feedback.text = "Downloading maps · Topography %d/%d · Streets %d/%d · Imagery %d/%d" % [plan.terrain_ready, plan.tiles.size(), plan.streets_ready, plan.tiles.size(), plan.get("imagery_ready", 0), plan.tiles.size()]
+					if pending_layer in ["buildings", "vegetation", "water"]:
+						feedback.text = "Downloading mapped %s · %d/%d areas" % [pending_layer,plan.get("scenery_ready",{}).get(pending_layer,0),plan.tiles.size()]
+					else: feedback.text = "Downloading maps · Topography %d/%d · Streets %d/%d · Imagery %d/%d" % [plan.terrain_ready, plan.tiles.size(), plan.streets_ready, plan.tiles.size(), plan.get("imagery_ready", 0), plan.tiles.size()]
 		return
 	var result: Dictionary = worker.wait_to_finish(); worker = null; busy = false
 	DirAccess.remove_absolute(cancel_path)
