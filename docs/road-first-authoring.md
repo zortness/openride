@@ -39,6 +39,11 @@ trace-based course remains available for compatibility; **Infer roads** explicit
 creates the new course. Existing legacy edits are not silently translated into
 road choices, and a stale road plan never silently falls back to a legacy course.
 
+![The Roads stage showing a selected road occurrence and its highlighted candidate in a synthetic Ride Project](images/road-review.png)
+
+The Roads stage above uses a synthetic project. The list keeps accepted and automatic
+occurrences available for inspection; the map highlights the selected candidate.
+
 ## Geometry, confidence and persistence
 
 The native matcher spaces redundant observations by at least 15 m, keeping explicit

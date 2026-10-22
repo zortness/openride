@@ -2,6 +2,8 @@
 
 An offline cycling simulator using real geographic routes and controllable indoor trainers.
 
+![OpenRide Home screen showing a fictional coastal road](docs/images/home.png)
+
 The Windows prototype supports route authoring, streamed scenery, Suito Bluetooth rides,
 activity history and FIT/TCX/GPX exports. Compatibility is limited to documented tested
 configurations; see [M6 progress](docs/m6-progress.md) for pairing and virtual shifting.
@@ -15,6 +17,14 @@ ZIP sharing use the bundled Rust `openride-author.exe`; diagnostics are collapse
 Original recordings and legacy projects remain preserved. See
 [road-first authoring](docs/road-first-authoring.md) for steps and current limits,
 and [Ride Projects and CLI](docs/ride-projects.md) for the compatibility commands.
+
+## Route preview
+
+![OpenRide route preview showing a synthetic road and ride metrics](docs/images/route-preview.png)
+
+These screens use fictional or synthetic scenery. The route preview shows simulated
+speed with no trainer connected. See the [illustrated road review workflow](docs/road-first-authoring.md#desktop-workflow)
+for the Create screen.
 
 ## First-time setup (Windows x64)
 

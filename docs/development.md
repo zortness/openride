@@ -93,6 +93,24 @@ godot --headless --path apps/rider --script res://tests/native.gd -- --fixture=A
 
 For native visual inspection, run normally with both `--import=ABSOLUTE_TCX_PATH` and `--snapshot=ABSOLUTE_PNG_PATH`; the application waits for import, saves its rendered viewport, and exits. No route image belongs in public fixtures without permission.
 
+### Documentation screenshots
+
+Use a synthetic Ride Project and its built package for publishable Create and route
+preview screenshots. The capture script opens the project for inspection and does not
+change its saved road choices. Set `APPDATA` to an isolated directory. These are the
+capture commands; automated runs should launch them as bounded, hidden processes
+with redirected logs:
+
+```powershell
+godot --path apps/rider --script res://tests/docs_capture.gd -- --capture-view=roads --capture-project=ABSOLUTE_SYNTHETIC_PROJECT --capture-output=ABSOLUTE_PNG_PATH
+godot --path apps/rider --script res://tests/docs_capture.gd -- --capture-view=preview --capture-package=ABSOLUTE_SYNTHETIC_PACKAGE --capture-output=ABSOLUTE_PNG_PATH
+```
+
+The script prints `DOCS_CAPTURE_OK` and exits nonzero on failure. An exported-app Home
+capture uses `--snapshot=ABSOLUTE_PNG_PATH` after Godot's `--` separator. Inspect
+every image before publishing it; route geography remains personal even without
+sensor data.
+
 ## Windows export
 
 Install the Windows export templates matching Godot 4.6.2, then build and export:
